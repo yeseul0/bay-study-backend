@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { StudyController } from './study.controller';
 import { FactoryService } from '../blockchain/factory.service';
-import { ParticipantService } from '../storage/participant.service';
 import { DatabaseService } from '../database/database.service';
 import { GitHubService } from '../github/github.service';
 import { BlockchainService } from '../blockchain/blockchain.service';
@@ -18,7 +17,7 @@ import { Repository } from '../entities/repository.entity';
     AuthModule
   ],
   controllers: [StudyController],
-  providers: [FactoryService, ParticipantService, DatabaseService, GitHubService, BlockchainService],
-  exports: [FactoryService, ParticipantService, DatabaseService],
+  providers: [FactoryService, DatabaseService, GitHubService, BlockchainService],
+  exports: [FactoryService, DatabaseService],
 })
 export class StudyModule {}
