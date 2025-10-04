@@ -42,7 +42,7 @@ export interface GitHubWebhookPayload {
   };
 }
 
-@Controller('attendence')
+@Controller('attendance')
 export class WebhookController {
   private readonly logger = new Logger(WebhookController.name);
 
