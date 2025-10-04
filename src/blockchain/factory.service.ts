@@ -7,7 +7,6 @@ export interface CreateStudyDto {
   studyName: string;
   depositAmount: string;
   penaltyAmount: string;
-  studyAdmin: string;
   studyStartTime: number;
   studyEndTime: number;
 }
@@ -52,15 +51,21 @@ export class FactoryService {
     try {
       this.logger.log(`Creating new study proxy: ${studyData.studyName}`);
 
-      // Wei 단위로 변환
-      const depositAmountWei = ethers.parseEther(studyData.depositAmount);
-      const penaltyAmountWei = ethers.parseEther(studyData.penaltyAmount);
+      // 이미 Wei 단위로 받았으므로 그대로 사용
+      const depositAmountWei = BigInt(studyData.depositAmount);
+      const penaltyAmountWei = BigInt(studyData.penaltyAmount);
+
+      // .env에서 관리자 주소 가져오기
+      const studyAdmin = this.configService.get<string>('STUDY_ADMIN_ADDRESS');
+      if (!studyAdmin) {
+        throw new Error('STUDY_ADMIN_ADDRESS environment variable is required');
+      }
 
       const tx = await this.factoryContract.createProxy(
         studyData.studyName,
         depositAmountWei,
         penaltyAmountWei,
-        studyData.studyAdmin,
+        studyAdmin,
         studyData.studyStartTime,
         studyData.studyEndTime
       );

@@ -1,10 +1,8 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
-import { StudyController } from './study.controller';
-import { FactoryService } from '../blockchain/factory.service';
-import { ParticipantService } from '../storage/participant.service';
+import { GitHubController } from './github.controller';
+import { GitHubService } from './github.service';
 import { DatabaseService } from '../database/database.service';
-import { GitHubService } from '../github/github.service';
 import { BlockchainService } from '../blockchain/blockchain.service';
 import { AuthModule } from '../auth/auth.module';
 import { User } from '../entities/user.entity';
@@ -15,10 +13,10 @@ import { Repository } from '../entities/repository.entity';
 @Module({
   imports: [
     TypeOrmModule.forFeature([User, Study, UserStudy, Repository]),
-    AuthModule
+    AuthModule,
   ],
-  controllers: [StudyController],
-  providers: [FactoryService, ParticipantService, DatabaseService, GitHubService, BlockchainService],
-  exports: [FactoryService, ParticipantService, DatabaseService],
+  controllers: [GitHubController],
+  providers: [GitHubService, DatabaseService, BlockchainService],
+  exports: [GitHubService],
 })
-export class StudyModule {}
+export class GitHubModule {}
