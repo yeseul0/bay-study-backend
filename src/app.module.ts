@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { WebhookModule } from './webhook/webhook.module';
+import { BlockchainService } from './blockchain/blockchain.service';
 
 @Module({
   imports: [
@@ -12,6 +13,6 @@ import { WebhookModule } from './webhook/webhook.module';
     WebhookModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, BlockchainService],
 })
 export class AppModule {}
