@@ -74,7 +74,7 @@ export class WebhookController {
           commitId: commit.id,
           message: commit.message,
           timestamp: commit.timestamp,
-          authorAddress: commit.author.email, // 이메일 대신 이더리움 주소 사용
+          authorEmail: commit.author.email, // GitHub 이메일 사용
           authorName: commit.author.name,
           repositoryName: payload.repository?.full_name || 'unknown'
         });
