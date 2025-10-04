@@ -1,9 +1,8 @@
-import { Controller, Post, Get, Body, Logger, HttpStatus, HttpCode, UseGuards, Headers, RawBodyRequest, Req } from '@nestjs/common';
+import { Controller, Post, Get, Body, Logger, HttpStatus, HttpCode, UseGuards, Headers } from '@nestjs/common';
 import { GitHubService } from './github.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/user.decorator';
 import type { JwtPayload } from '../auth/jwt.service';
-import { Request } from 'express';
 
 export interface GitHubWebhookPayload {
   // ping 이벤트용
@@ -71,24 +70,26 @@ export class GitHubController {
     message: string;
   }> {
     try {
-      const repositories = await this.githubService.getUserRepositories(user.email);
+      const repositories = await this.githubService.getUserRepositories(
+        user.email,
+      );
 
       return {
         success: true,
         repositories,
-        message: `Found ${repositories.length} repositories`
+        message: `Found ${repositories.length} repositories`,
       };
-    } catch (error) {
+    } catch (error: any) {
       if (error.response?.status === 401) {
         return {
           success: false,
-          message: 'GitHub access token expired. Please login again.'
+          message: 'GitHub access token expired. Please login again.',
         };
       }
 
       return {
         success: false,
-        message: `Failed to fetch repositories: ${error.message}`
+        message: `Failed to fetch repositories: ${error.message}`,
       };
     }
   }
@@ -102,7 +103,6 @@ export class GitHubController {
     @Body() payload: GitHubWebhookPayload,
     @Headers('x-github-event') githubEvent: string,
     @Headers('x-hub-signature-256') signature: string,
-    @Req() req: Request
   ): Promise<{ success: boolean; message: string }> {
     try {
       this.logger.log(`GitHub webhook received: ${githubEvent}`);
@@ -142,7 +142,7 @@ export class GitHubController {
           timestamp: commit.timestamp,
           authorEmail: commit.author.email, // GitHub 이메일 사용
           authorName: commit.author.name,
-          repositoryName: payload.repository?.full_name || 'unknown'
+          repositoryName: payload.repository?.full_name || 'unknown',
         });
       }
 
@@ -158,9 +158,9 @@ export class GitHubController {
    */
   @Post('webhook/test')
   @HttpCode(HttpStatus.OK)
-  async testWebhook(@Body() body: any): Promise<{ success: boolean; data: any }> {
+  testWebhook(@Body() body: any): Promise<{ success: boolean; data: any }> {
     this.logger.log('Test webhook received');
     this.logger.log('Payload:', JSON.stringify(body, null, 2));
-    return { success: true, data: body };
+    return Promise.resolve({ success: true, data: body });
   }
 }
