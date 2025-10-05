@@ -97,10 +97,10 @@ export class GitHubService {
         const actualStartTime = midnightTimestamp + study.study_start_time;
         const actualEndTime = midnightTimestamp + study.study_end_time;
 
-        this.logger.log(`DEBUG - Commit: ${new Date(commitTimestamp * 1000).toISOString()}`);
-        this.logger.log(`DEBUG - Study start: ${new Date(actualStartTime * 1000).toISOString()}`);
-        this.logger.log(`DEBUG - Study end: ${new Date(actualEndTime * 1000).toISOString()}`);
-        this.logger.log(`DEBUG - Midnight base: ${new Date(midnightTimestamp * 1000).toISOString()}`);
+        this.logger.log(`DEBUG - Commit timestamp: ${commitTimestamp}`);
+        this.logger.log(`DEBUG - Study start timestamp: ${actualStartTime}`);
+        this.logger.log(`DEBUG - Study end timestamp: ${actualEndTime}`);
+        this.logger.log(`DEBUG - Midnight timestamp: ${midnightTimestamp}`);
 
         // 커밋 날짜 (YYYY-MM-DD 형식)
         const commitDateString = new Date(commitData.timestamp).toISOString().split('T')[0];
