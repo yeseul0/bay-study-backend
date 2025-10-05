@@ -141,17 +141,21 @@ export class GitHubController {
       // 백그라운드에서 비동기 처리
       setImmediate(async () => {
         try {
-          for (const commit of payload.commits) {
-            await this.githubService.processCommit({
-              commitId: commit.id,
-              message: commit.message,
-              timestamp: commit.timestamp,
-              authorEmail: commit.author.email,
-              authorName: commit.author.name,
-              repositoryName: payload.repository?.html_url || 'unknown',
-            });
+          if (payload.commits && payload.commits.length > 0) {
+            for (const commit of payload.commits) {
+              await this.githubService.processCommit({
+                commitId: commit.id,
+                message: commit.message,
+                timestamp: commit.timestamp,
+                authorEmail: commit.author.email,
+                authorName: commit.author.name,
+                repositoryName: payload.repository?.html_url || 'unknown',
+              });
+            }
+            this.logger.log(`Successfully processed ${payload.commits.length} commits in background`);
+          } else {
+            this.logger.log('No commits to process in background');
           }
-          this.logger.log(`Successfully processed ${payload.commits.length} commits in background`);
         } catch (error) {
           this.logger.error('Background commit processing failed', error);
         }
