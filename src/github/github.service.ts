@@ -77,6 +77,10 @@ export class GitHubService {
         if (!isWithinStudyTime) {
           this.logger.log(`Commit time ${new Date(commitData.timestamp).toISOString()} is outside study hours for ${study.study_name}`);
           this.logger.log(`Study hours: ${new Date(study.study_start_time * 1000).toISOString()} - ${new Date(study.study_end_time * 1000).toISOString()}`);
+          this.logger.log(`Commit timestamp: ${commitTimestamp}, Study start: ${study.study_start_time}, Study end: ${study.study_end_time}`);
+          this.logger.log(`Commit time in KST: ${new Date(commitData.timestamp).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}`);
+          this.logger.log(`Study start in KST: ${new Date(study.study_start_time * 1000).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}`);
+          this.logger.log(`Study end in KST: ${new Date(study.study_end_time * 1000).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}`);
           continue;
         }
 
