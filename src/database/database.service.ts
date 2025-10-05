@@ -157,6 +157,68 @@ export class DatabaseService {
   }
 
   /**
+   * 스터디에서 참가자 탈퇴 (완전 삭제)
+   */
+  async withdrawFromStudy(githubEmail: string, proxyAddress: string): Promise<void> {
+    // 1. 사용자 찾기
+    const user = await this.userRepository.findOne({
+      where: { github_email: githubEmail.toLowerCase() }
+    });
+
+    if (!user) {
+      throw new Error(`User not found: ${githubEmail}`);
+    }
+
+    // 2. 스터디 찾기
+    const study = await this.studyRepository.findOne({
+      where: { proxy_address: proxyAddress.toLowerCase() }
+    });
+
+    if (!study) {
+      throw new Error(`Study not found: ${proxyAddress}`);
+    }
+
+    // 3. 참가자 관계 삭제
+    const userStudy = await this.userStudyRepository.findOne({
+      where: {
+        user_id: user.id,
+        study_id: study.id
+      }
+    });
+
+    if (!userStudy) {
+      throw new Error(`User ${githubEmail} is not a participant in study ${proxyAddress}`);
+    }
+
+    await this.userStudyRepository.remove(userStudy);
+    this.logger.log(`Removed participant ${githubEmail} from study ${proxyAddress}`);
+
+    // 4. 해당 사용자가 이 스터디에 등록한 레포지토리들 완전 삭제
+    const deleteResult = await this.repositoryRepository.delete({
+      user_id: user.id,
+      study_id: study.id
+    });
+
+    if (deleteResult.affected && deleteResult.affected > 0) {
+      this.logger.log(`Deleted ${deleteResult.affected} repositories for ${githubEmail} in study ${proxyAddress}`);
+    }
+
+    // 5. 관련 커밋 기록도 삭제 (선택사항)
+    await this.commitRecordRepository.delete({
+      study_id: study.id,
+      user_id: user.id
+    });
+
+    // 6. 잔액 기록도 삭제 (선택사항)
+    await this.balanceRepository.delete({
+      study_id: study.id,
+      user_id: user.id
+    });
+
+    this.logger.log(`Successfully removed ${githubEmail} from study ${proxyAddress} with all related data`);
+  }
+
+  /**
    * GitHub 이메일로 커밋 가능한 스터디 찾기
    */
   async findStudyForCommitByEmail(githubEmail: string): Promise<{

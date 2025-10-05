@@ -17,6 +17,10 @@ export interface RegisterRepositoryDto {
   repoUrl: string;
 }
 
+export interface WithdrawFromStudyDto {
+  proxyAddress: string;
+}
+
 @Controller('study')
 export class StudyController {
   constructor(
@@ -329,6 +333,29 @@ export class StudyController {
       return {
         success: false,
         message: `Failed to get all study balances: ${error.message}`
+      };
+    }
+  }
+
+  @Post('withdraw')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async withdrawFromStudy(
+    @Body() withdrawDto: WithdrawFromStudyDto,
+    @CurrentUser() user: JwtPayload
+  ): Promise<{ success: boolean; message: string }> {
+    try {
+      // 데이터베이스에서 참가자 완전 삭제 및 관련 데이터 정리
+      await this.databaseService.withdrawFromStudy(user.email, withdrawDto.proxyAddress);
+
+      return {
+        success: true,
+        message: `Successfully withdrew from study ${withdrawDto.proxyAddress}`
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to withdraw from study: ${error.message}`
       };
     }
   }
