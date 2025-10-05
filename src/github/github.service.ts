@@ -221,7 +221,7 @@ export class GitHubService {
 
       // 기존 웹훅 확인
       const existingWebhooks = await this.getRepositoryWebhooks(owner, cleanRepo, accessToken);
-      const targetUrl = `${this.configService.get('WEBHOOK_PAYLOAD_URL')}/github/webhook`;
+      const targetUrl = this.configService.get('GITHUB_WEBHOOK_URL');
 
       const existingWebhook = existingWebhooks.find(hook =>
         hook.config?.url === targetUrl &&
@@ -245,7 +245,7 @@ export class GitHubService {
         active: true,
         events: ['push'], // push 이벤트만 구독
         config: {
-          url: `${this.configService.get('WEBHOOK_PAYLOAD_URL')}/github/webhook`,
+          url: this.configService.get('GITHUB_WEBHOOK_URL'),
           content_type: 'json',
           insecure_ssl: '0', // HTTPS 필수
           secret: webhookSecret // 보안을 위한 시크릿 키
