@@ -88,6 +88,20 @@ export class GitHubService {
 
         this.logger.log(`Commit is within study hours for ${study.study_name}, recording to blockchain...`);
 
+        // 디버그: 실제 계산된 시간 출력
+        const commitDate = new Date(commitTimestamp * 1000);
+        const kstOffset = 9 * 60 * 60 * 1000;
+        const commitKST = new Date(commitDate.getTime() + kstOffset);
+        const commitDateMidnight = new Date(commitKST.getFullYear(), commitKST.getMonth(), commitKST.getDate());
+        const midnightTimestamp = Math.floor(commitDateMidnight.getTime() / 1000) - kstOffset / 1000;
+        const actualStartTime = midnightTimestamp + study.study_start_time;
+        const actualEndTime = midnightTimestamp + study.study_end_time;
+
+        this.logger.log(`DEBUG - Commit: ${new Date(commitTimestamp * 1000).toISOString()}`);
+        this.logger.log(`DEBUG - Study start: ${new Date(actualStartTime * 1000).toISOString()}`);
+        this.logger.log(`DEBUG - Study end: ${new Date(actualEndTime * 1000).toISOString()}`);
+        this.logger.log(`DEBUG - Midnight base: ${new Date(midnightTimestamp * 1000).toISOString()}`);
+
         // 커밋 날짜 (YYYY-MM-DD 형식)
         const commitDate = new Date(commitData.timestamp).toISOString().split('T')[0];
 
