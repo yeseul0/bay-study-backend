@@ -49,11 +49,13 @@ export class AuthController {
       const token = this.jwtService.generateAccessToken(result.user.id, result.user.github_email);
 
       // JWT를 httpOnly 쿠키로 설정
+      this.logger.log(`Setting JWT cookie for user: ${result.user.github_email}`);
       res.cookie('access_token', token, {
         httpOnly: true, // XSS 공격 방지
         secure: process.env.NODE_ENV === 'production', // HTTPS에서만 전송
-        sameSite: 'lax', // CSRF 공격 방지
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // 배포시 cross-site 허용
         maxAge: 30 * 24 * 60 * 60 * 1000, // 30일
+        domain: process.env.NODE_ENV === 'production' ? undefined : 'localhost', // 로컬에서는 명시적 도메인
       });
 
       // 성공시 프론트엔드 대시보드로 리다이렉트
