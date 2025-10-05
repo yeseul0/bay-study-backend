@@ -76,11 +76,10 @@ export class GitHubService {
 
         if (!isWithinStudyTime) {
           this.logger.log(`Commit time ${new Date(commitData.timestamp).toISOString()} is outside study hours for ${study.study_name}`);
-          this.logger.log(`Study hours: ${new Date(study.study_start_time * 1000).toISOString()} - ${new Date(study.study_end_time * 1000).toISOString()}`);
-          this.logger.log(`Commit timestamp: ${commitTimestamp}, Study start: ${study.study_start_time}, Study end: ${study.study_end_time}`);
+          this.logger.log(`Commit timestamp: ${commitTimestamp}, Study start offset: ${study.study_start_time}s, Study end offset: ${study.study_end_time}s`);
           this.logger.log(`Commit time in KST: ${new Date(commitData.timestamp).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}`);
-          this.logger.log(`Study start in KST: ${new Date(study.study_start_time * 1000).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}`);
-          this.logger.log(`Study end in KST: ${new Date(study.study_end_time * 1000).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}`);
+          this.logger.log(`Study start time: ${Math.floor(study.study_start_time / 3600)}:${String(Math.floor((study.study_start_time % 3600) / 60)).padStart(2, '0')}`);
+          this.logger.log(`Study end time: ${Math.floor(study.study_end_time / 3600)}:${String(Math.floor((study.study_end_time % 3600) / 60)).padStart(2, '0')}`);
           continue;
         }
 
@@ -126,16 +125,36 @@ export class GitHubService {
   /**
    * 커밋 시간이 스터디 시간 내에 있는지 확인
    * @param commitTimestamp 커밋 시간 (Unix timestamp)
-   * @param studyStartTime 스터디 시작 시간 (Unix timestamp)
-   * @param studyEndTime 스터디 종료 시간 (Unix timestamp)
+   * @param studyStartTime 하루 중 시작 시간 (자정부터 초 단위, 예: 23시 = 82800)
+   * @param studyEndTime 하루 중 종료 시간 (자정부터 초 단위, 예: 새벽1시 = 3600)
    */
   private isCommitWithinStudyTime(
     commitTimestamp: number,
     studyStartTime: number,
     studyEndTime: number
   ): boolean {
-    // 커밋 시간이 스터디 시간 범위 내에 있는지 확인
-    return commitTimestamp >= studyStartTime && commitTimestamp <= studyEndTime;
+    // 커밋 시간을 KST로 변환
+    const commitDate = new Date(commitTimestamp * 1000);
+    const kstOffset = 9 * 60 * 60 * 1000; // 9시간을 밀리초로
+    const commitKST = new Date(commitDate.getTime() + kstOffset);
+
+    // 커밋 날짜의 자정 (KST 기준)
+    const commitDateMidnight = new Date(commitKST.getFullYear(), commitKST.getMonth(), commitKST.getDate());
+    const midnightTimestamp = Math.floor(commitDateMidnight.getTime() / 1000) - kstOffset / 1000; // UTC로 다시 변환
+
+    // 스터디 시작/종료 시간 계산
+    const actualStartTime = midnightTimestamp + studyStartTime;
+    const actualEndTime = midnightTimestamp + studyEndTime;
+
+    // 새벽을 넘나드는 스터디인지 확인 (예: 23:00-01:00)
+    if (studyEndTime < studyStartTime) {
+      // 새벽을 넘나드는 경우: 시작시간부터 자정까지 또는 자정부터 종료시간까지
+      const nextDayEndTime = midnightTimestamp + 24 * 60 * 60 + studyEndTime;
+      return (commitTimestamp >= actualStartTime) || (commitTimestamp <= nextDayEndTime);
+    } else {
+      // 같은 날 내에서 끝나는 경우
+      return commitTimestamp >= actualStartTime && commitTimestamp <= actualEndTime;
+    }
   }
 
   /**
