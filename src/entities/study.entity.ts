@@ -21,11 +21,11 @@ export class Study {
   @Column({ type: 'bigint' })
   study_end_time: number; // Unix timestamp
 
-  @Column({ type: 'decimal', precision: 20, scale: 0 })
-  deposit_amount: string; // Wei 단위 (string으로 저장)
+  @Column({ type: 'decimal', precision: 20, scale: 6 })
+  deposit_amount: string; // USDC 단위 (6자리 소수점)
 
-  @Column({ type: 'decimal', precision: 20, scale: 0 })
-  penalty_amount: string; // Wei 단위 (string으로 저장)
+  @Column({ type: 'decimal', precision: 20, scale: 6 })
+  penalty_amount: string; // USDC 단위 (6자리 소수점)
 
   @CreateDateColumn()
   created_at: Date;

@@ -89,7 +89,9 @@ export class DatabaseService {
     // 외래키 제약조건 임시 비활성화
     await this.userRepository.query('SET FOREIGN_KEY_CHECKS = 0');
 
-    // 모든 테이블 데이터 삭제
+    // 모든 테이블 데이터 삭제 (외래키 순서 고려)
+    await this.balanceRepository.clear();
+    await this.commitRecordRepository.clear();
     await this.repositoryRepository.clear();
     await this.userStudyRepository.clear();
     await this.studyRepository.clear();
@@ -430,13 +432,19 @@ export class DatabaseService {
     const todayDate = today.toISOString().split('T')[0]; // YYYY-MM-DD
     const yesterdayDate = yesterday.toISOString().split('T')[0];
 
-    // 2. 커밋 기록이 있는 스터디들 조회
+    // 2. 커밋 기록이 있는 스터디들 조회 (중복 제거)
     const commitRecords = await this.commitRecordRepository
       .createQueryBuilder('cr')
       .leftJoinAndSelect('cr.study', 'study')
       .where('cr.date IN (:...dates)', { dates: [todayDate, yesterdayDate] })
-      .groupBy('cr.study_id, cr.date')
       .getMany();
+
+    // 중복 제거 (study_id + date 조합별로 하나씩만)
+    const uniqueRecords = commitRecords.filter((record, index, self) =>
+      index === self.findIndex(r =>
+        r.study_id === record.study_id && r.date === record.date
+      )
+    );
 
     const studiesToClose: Array<{
       proxyAddress: string;
@@ -445,7 +453,7 @@ export class DatabaseService {
       studyEndTime: number;
     }> = [];
 
-    for (const record of commitRecords) {
+    for (const record of uniqueRecords) {
       const study = record.study;
       const recordDate = record.date;
 
@@ -606,7 +614,7 @@ export class DatabaseService {
     }
 
     const savedRecord = await this.balanceRepository.save(balanceRecord);
-    this.logger.log(`Updated balance: ${data.currentBalance} wei for user ${data.userId} in study ${data.studyId}`);
+    this.logger.log(`Updated balance: ${data.currentBalance} USDC for user ${data.userId} in study ${data.studyId}`);
 
     return savedRecord;
   }

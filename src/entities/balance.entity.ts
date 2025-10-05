@@ -17,8 +17,8 @@ export class Balance {
   @Column('varchar', { length: 42 })
   wallet_address: string;
 
-  @Column('decimal', { precision: 18, scale: 0 })
-  current_balance: string; // 현재 잔액 (wei 단위)
+  @Column('decimal', { precision: 20, scale: 6 })
+  current_balance: string; // 현재 잔액 (USDC 단위)
 
   @UpdateDateColumn()
   updated_at: Date;

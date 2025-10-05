@@ -5,8 +5,8 @@ import { FactoryABI } from './factoryABI';
 
 export interface CreateStudyDto {
   studyName: string;
-  depositAmount: string;
-  penaltyAmount: string;
+  depositAmount: string; // 이미 변환된 USDC 정수값 (예: "100000000" = 100 USDC)
+  penaltyAmount: string; // 이미 변환된 USDC 정수값 (예: "10000000" = 10 USDC)
   studyStartTime: number;
   studyEndTime: number;
 }
@@ -51,9 +51,9 @@ export class FactoryService {
     try {
       this.logger.log(`Creating new study proxy: ${studyData.studyName}`);
 
-      // 이미 Wei 단위로 받았으므로 그대로 사용
-      const depositAmountWei = BigInt(studyData.depositAmount);
-      const penaltyAmountWei = BigInt(studyData.penaltyAmount);
+      // 프론트에서 이미 변환된 값을 받으므로 그대로 BigInt로 변환
+      const depositAmountScaled = BigInt(studyData.depositAmount);
+      const penaltyAmountScaled = BigInt(studyData.penaltyAmount);
 
       // .env에서 관리자 주소 가져오기
       const studyAdmin = this.configService.get<string>('STUDY_ADMIN_ADDRESS');
@@ -63,8 +63,8 @@ export class FactoryService {
 
       const tx = await this.factoryContract.createProxy(
         studyData.studyName,
-        depositAmountWei,
-        penaltyAmountWei,
+        depositAmountScaled,
+        penaltyAmountScaled,
         studyAdmin,
         studyData.studyStartTime,
         studyData.studyEndTime

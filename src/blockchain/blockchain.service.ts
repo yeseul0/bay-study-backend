@@ -8,7 +8,6 @@ import { StudyGroupABI } from './studygroupABI';
 export class BlockchainService {
   private readonly logger = new Logger(BlockchainService.name);
   private provider: ethers.JsonRpcProvider;
-  private contract: ethers.Contract;
   private wallet: ethers.Wallet;
 
 
@@ -29,14 +28,6 @@ export class BlockchainService {
       }
       this.wallet = new ethers.Wallet(privateKey, this.provider);
 
-      // Contract Address 설정 (환경변수에서 가져오기)
-      const contractAddress = this.configService.get<string>('CONTRACT_ADDRESS');
-      if (!contractAddress) {
-        throw new Error('CONTRACT_ADDRESS environment variable is required');
-      }
-
-      this.contract = new ethers.Contract(contractAddress, StudyGroupABI.output.abi, this.wallet);
-
       this.logger.log('Blockchain service initialized successfully');
     } catch (error) {
       this.logger.error('Failed to initialize blockchain service', error);
@@ -55,7 +46,7 @@ export class BlockchainService {
       this.logger.log(`Today midnight timestamp: ${todayMidnight}`);
 
       // 특정 스터디 컨트랙트에 연결
-      const studyContract = new ethers.Contract(proxyAddress, StudyGroupABI.output.abi, this.wallet);
+      const studyContract = new ethers.Contract(proxyAddress, StudyGroupABI, this.wallet);
 
       // 컨트랙트의 startTodayStudy 함수 호출
       const tx = await studyContract.startTodayStudy(todayMidnight);
@@ -86,7 +77,7 @@ export class BlockchainService {
       this.logger.log(`Commit timestamp: ${commitTimestamp} (${new Date(commitTimestamp * 1000).toISOString()})`);
 
       // 특정 스터디 컨트랙트에 연결
-      const studyContract = new ethers.Contract(proxyAddress, StudyGroupABI.output.abi, this.wallet);
+      const studyContract = new ethers.Contract(proxyAddress, StudyGroupABI, this.wallet);
 
       // 컨트랙트의 trackCommit 함수 호출
       const tx = await studyContract.trackCommit(
@@ -117,7 +108,7 @@ export class BlockchainService {
       this.logger.log(`Closing study for contract ${proxyAddress} on date ${new Date(studyDate * 1000).toISOString()}`);
 
       // 특정 스터디 컨트랙트에 연결
-      const studyContract = new ethers.Contract(proxyAddress, StudyGroupABI.output.abi, this.wallet);
+      const studyContract = new ethers.Contract(proxyAddress, StudyGroupABI, this.wallet);
 
       // 컨트랙트의 closeStudy 함수 호출
       const tx = await studyContract.closeStudy(studyDate);
@@ -141,6 +132,72 @@ export class BlockchainService {
    */
   isValidAddress(address: string): boolean {
     return ethers.isAddress(address);
+  }
+
+  /**
+   * 참가자의 현재 예치금 잔액 조회 (USDC 단위)
+   * @param proxyAddress 스터디 컨트랙트 주소
+   * @param participantAddress 참가자 주소
+   * @returns USDC 단위 잔액
+   */
+  async getParticipantBalance(proxyAddress: string, participantAddress: string): Promise<string> {
+    try {
+      // 특정 스터디 컨트랙트에 연결
+      const studyContract = new ethers.Contract(proxyAddress, StudyGroupABI, this.wallet);
+
+      // 컨트랙트에서 balances 조회
+      const balanceRaw = await studyContract.balances(participantAddress);
+
+      // USDC는 6자리 소수점이므로 formatUnits 사용
+      const balanceUSDC = ethers.formatUnits(balanceRaw, 6);
+
+      this.logger.log(`Balance for ${participantAddress}: ${balanceUSDC} USDC`);
+      return balanceUSDC;
+
+    } catch (error) {
+      this.logger.error(`Failed to get balance for ${participantAddress}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * 모든 참가자의 예치금 잔액 조회
+   * @param proxyAddress 스터디 컨트랙트 주소
+   * @returns 참가자별 잔액 맵
+   */
+  async getAllParticipantBalances(proxyAddress: string): Promise<Record<string, string>> {
+    try {
+      const studyContract = new ethers.Contract(proxyAddress, StudyGroupABI, this.wallet);
+
+      // 모든 참가자 목록 조회 - 우선 참가자 배열을 직접 조회하는 방식으로 수정
+      let participantCount = 0;
+      const participants: string[] = [];
+
+      try {
+        // participants 배열의 길이를 확인하기 위해 순차적으로 조회
+        while (true) {
+          const participant = await studyContract.participants(participantCount);
+          participants.push(participant);
+          participantCount++;
+        }
+      } catch {
+        // 배열 끝에 도달하면 에러가 발생함
+      }
+      const balances: Record<string, string> = {};
+
+      for (const participantAddress of participants) {
+        const balanceRaw = await studyContract.balances(participantAddress);
+        const balanceUSDC = ethers.formatUnits(balanceRaw, 6);
+        balances[participantAddress] = balanceUSDC;
+      }
+
+      this.logger.log(`Retrieved balances for ${participantCount} participants`);
+      return balances;
+
+    } catch (error) {
+      this.logger.error('Failed to get all participant balances', error);
+      throw error;
+    }
   }
 
   /**
