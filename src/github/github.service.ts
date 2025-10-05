@@ -150,14 +150,14 @@ export class GitHubService {
     studyStartTime: number,
     studyEndTime: number
   ): boolean {
-    // 커밋 시간을 KST로 변환
+    // 커밋 시간을 KST로 변환해서 날짜 찾기
     const commitDate = new Date(commitTimestamp * 1000);
     const kstOffset = 9 * 60 * 60 * 1000; // 9시간을 밀리초로
     const commitKST = new Date(commitDate.getTime() + kstOffset);
 
-    // 커밋 날짜의 자정 (KST 기준)
+    // 커밋 날짜의 자정 (KST 기준) → UTC 자정으로 변환
     const commitDateMidnight = new Date(commitKST.getFullYear(), commitKST.getMonth(), commitKST.getDate());
-    const midnightTimestamp = Math.floor(commitDateMidnight.getTime() / 1000) - kstOffset / 1000; // UTC로 다시 변환
+    const midnightTimestamp = Math.floor((commitDateMidnight.getTime() - kstOffset) / 1000); // KST 자정을 UTC로
 
     // 스터디 시작/종료 시간 계산
     const actualStartTime = midnightTimestamp + studyStartTime;
