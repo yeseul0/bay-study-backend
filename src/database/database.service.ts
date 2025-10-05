@@ -523,7 +523,10 @@ export class DatabaseService {
       const studyDate = Math.floor(new Date(recordDate + 'T00:00:00.000Z').getTime() / 1000);
 
       // 스터디 종료 시간이 지났는지 확인
-      if (now > study.study_end_time) {
+      // study.study_end_time은 자정부터의 오프셋이므로 해당 날짜 자정에 더해서 비교
+      const actualEndTime = studyDate + study.study_end_time;
+
+      if (now > actualEndTime) {
         studiesToClose.push({
           proxyAddress: study.proxy_address,
           studyName: study.study_name,
