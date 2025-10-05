@@ -89,9 +89,9 @@ export class GitHubService {
         this.logger.log(`Commit is within study hours for ${study.study_name}, recording to blockchain...`);
 
         // 디버그: 실제 계산된 시간 출력
-        const commitDate = new Date(commitTimestamp * 1000);
+        const debugCommitDate = new Date(commitTimestamp * 1000);
         const kstOffset = 9 * 60 * 60 * 1000;
-        const commitKST = new Date(commitDate.getTime() + kstOffset);
+        const commitKST = new Date(debugCommitDate.getTime() + kstOffset);
         const commitDateMidnight = new Date(commitKST.getFullYear(), commitKST.getMonth(), commitKST.getDate());
         const midnightTimestamp = Math.floor(commitDateMidnight.getTime() / 1000) - kstOffset / 1000;
         const actualStartTime = midnightTimestamp + study.study_start_time;
@@ -103,13 +103,13 @@ export class GitHubService {
         this.logger.log(`DEBUG - Midnight base: ${new Date(midnightTimestamp * 1000).toISOString()}`);
 
         // 커밋 날짜 (YYYY-MM-DD 형식)
-        const commitDate = new Date(commitData.timestamp).toISOString().split('T')[0];
+        const commitDateString = new Date(commitData.timestamp).toISOString().split('T')[0];
 
         // 데이터베이스에 커밋 기록 저장 (하루 첫 번째 커밋만)
         const commitRecord = await this.databaseService.recordCommit({
           studyId: study.id,
           userId: participation.userId!, // userId 추가 필요
-          date: commitDate,
+          date: commitDateString,
           commitTimestamp: commitTimestamp,
           commitId: commitData.commitId,
           commitMessage: commitData.message,
