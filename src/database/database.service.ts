@@ -176,17 +176,42 @@ export class DatabaseService {
   }
 
   /**
-   * 레포지토리 URL로 스터디 찾기
+   * 레포지토리 URL로 스터디들 찾기 (하나의 레포가 여러 스터디에 등록될 수 있음)
    */
-  async findStudyByRepository(repoUrl: string): Promise<Study | null> {
-    const repository = await this.repositoryRepository
+  async findStudiesByRepository(repoUrl: string): Promise<Study[]> {
+    const repositories = await this.repositoryRepository
       .createQueryBuilder('repo')
       .leftJoinAndSelect('repo.study', 'study')
       .where('repo.repo_url = :repoUrl', { repoUrl })
       .andWhere('repo.is_active = :isActive', { isActive: true })
+      .getMany();
+
+    return repositories.map(repo => repo.study).filter(study => study !== null);
+  }
+
+  /**
+   * 특정 사용자가 특정 스터디에 참여하고 있는지 확인
+   */
+  async isUserParticipantInStudy(githubEmail: string, proxyAddress: string): Promise<{
+    isParticipant: boolean;
+    walletAddress?: string;
+  }> {
+    const userStudy = await this.userStudyRepository
+      .createQueryBuilder('us')
+      .leftJoinAndSelect('us.user', 'user')
+      .leftJoinAndSelect('us.study', 'study')
+      .where('user.github_email = :email', { email: githubEmail.toLowerCase() })
+      .andWhere('study.proxy_address = :proxyAddress', { proxyAddress: proxyAddress.toLowerCase() })
       .getOne();
 
-    return repository?.study || null;
+    if (userStudy) {
+      return {
+        isParticipant: true,
+        walletAddress: userStudy.wallet_address
+      };
+    }
+
+    return { isParticipant: false };
   }
 
   /**

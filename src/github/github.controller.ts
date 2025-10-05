@@ -34,6 +34,7 @@ export interface GitHubWebhookPayload {
     id: number;
     name: string;
     full_name: string;
+    html_url: string;
     owner?: {
       login: string;
       id: number;
@@ -134,19 +135,29 @@ export class GitHubController {
 
       this.logger.log(`Processing ${payload.commits.length} commits`);
 
-      // 각 커밋에 대해 처리
-      for (const commit of payload.commits) {
-        await this.githubService.processCommit({
-          commitId: commit.id,
-          message: commit.message,
-          timestamp: commit.timestamp,
-          authorEmail: commit.author.email, // GitHub 이메일 사용
-          authorName: commit.author.name,
-          repositoryName: payload.repository?.full_name || 'unknown',
-        });
-      }
+      // 즉시 응답 (GitHub 타임아웃 방지)
+      const response = { success: true, message: 'Webhook received, processing commits...' };
 
-      return { success: true, message: 'Commits processed successfully' };
+      // 백그라운드에서 비동기 처리
+      setImmediate(async () => {
+        try {
+          for (const commit of payload.commits) {
+            await this.githubService.processCommit({
+              commitId: commit.id,
+              message: commit.message,
+              timestamp: commit.timestamp,
+              authorEmail: commit.author.email,
+              authorName: commit.author.name,
+              repositoryName: payload.repository?.html_url || 'unknown',
+            });
+          }
+          this.logger.log(`Successfully processed ${payload.commits.length} commits in background`);
+        } catch (error) {
+          this.logger.error('Background commit processing failed', error);
+        }
+      });
+
+      return response;
     } catch (error) {
       this.logger.error('Failed to process GitHub webhook', error);
       return { success: false, message: 'Failed to process webhook' };
@@ -159,8 +170,35 @@ export class GitHubController {
   @Post('webhook/test')
   @HttpCode(HttpStatus.OK)
   testWebhook(@Body() body: any): Promise<{ success: boolean; data: any }> {
-    this.logger.log('Test webhook received');
-    this.logger.log('Payload:', JSON.stringify(body, null, 2));
+    this.logger.log('🎯 Test webhook received!');
+
+    // 기본 정보 로그
+    this.logger.log(`📦 Repository: ${body.repository?.full_name || 'Unknown'}`);
+    this.logger.log(`🌐 Repository URL: ${body.repository?.html_url || 'Unknown'}`);
+    this.logger.log(`👤 Sender: ${body.sender?.login || 'Unknown'}`);
+
+    // 커밋 정보 로그 (있으면)
+    if (body.commits && body.commits.length > 0) {
+      this.logger.log(`📝 Commits found: ${body.commits.length}`);
+      body.commits.forEach((commit: any, index: number) => {
+        this.logger.log(`  📌 Commit ${index + 1}:`);
+        this.logger.log(`    ID: ${commit.id?.substring(0, 8) || 'Unknown'}`);
+        this.logger.log(`    Author: ${commit.author?.name || 'Unknown'} (${commit.author?.email || 'Unknown'})`);
+        this.logger.log(`    Message: ${commit.message || 'No message'}`);
+        this.logger.log(`    Timestamp: ${commit.timestamp || 'Unknown'}`);
+      });
+    } else {
+      this.logger.log('📝 No commits in payload');
+    }
+
+    // ping 이벤트인지 확인
+    if (body.zen) {
+      this.logger.log(`🏓 Ping event received! Zen: "${body.zen}"`);
+    }
+
+    // 전체 페이로드 (축약버전)
+    this.logger.log('📋 Full payload keys:', Object.keys(body));
+
     return Promise.resolve({ success: true, data: body });
   }
 }

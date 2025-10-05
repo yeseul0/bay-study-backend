@@ -35,28 +35,43 @@ export class GitHubService {
       this.logger.log(`Repository: ${commitData.repositoryName}`);
       this.logger.log(`Timestamp: ${commitData.timestamp}`);
 
-      // GitHub 이메일로 참가자 찾기
-      const participantStudy = await this.databaseService.findStudyForCommitByEmail(commitData.authorEmail);
-      if (!participantStudy) {
-        this.logger.warn(`No study found for email: ${commitData.authorEmail}`);
+      // 레포지토리 URL로 관련된 스터디들 찾기
+      const studies = await this.databaseService.findStudiesByRepository(commitData.repositoryName);
+      if (studies.length === 0) {
+        this.logger.warn(`No studies found for repository: ${commitData.repositoryName}`);
         return;
       }
 
-      this.logger.log(`Found study for participant: ${participantStudy.proxyAddress} (wallet: ${participantStudy.walletAddress})`);
+      this.logger.log(`Found ${studies.length} studies for repository: ${commitData.repositoryName}`);
 
-      // 지갑 주소 유효성 검사
-      if (!this.blockchainService.isValidAddress(participantStudy.walletAddress)) {
-        this.logger.warn(`Invalid Ethereum address: ${participantStudy.walletAddress}`);
-        return;
+      // 각 스터디별로 사용자 참여 여부 확인 및 커밋 기록
+      for (const study of studies) {
+        const participation = await this.databaseService.isUserParticipantInStudy(
+          commitData.authorEmail,
+          study.proxy_address
+        );
+
+        if (!participation.isParticipant) {
+          this.logger.log(`User ${commitData.authorEmail} is not a participant in study ${study.study_name}`);
+          continue;
+        }
+
+        this.logger.log(`User ${commitData.authorEmail} is participant in study ${study.study_name} (wallet: ${participation.walletAddress})`);
+
+        // 지갑 주소 유효성 검사
+        if (!this.blockchainService.isValidAddress(participation.walletAddress!)) {
+          this.logger.warn(`Invalid Ethereum address: ${participation.walletAddress}`);
+          continue;
+        }
+
+        // 커밋 시간을 Unix 타임스탬프로 변환
+        const commitTimestamp = getUnixTimestamp(new Date(commitData.timestamp));
+
+        // 블록체인에 커밋 기록 (해당 스터디 프록시에, 참가자의 지갑 주소로)
+        await this.blockchainService.trackCommit(participation.walletAddress!, commitTimestamp);
+
+        this.logger.log(`Successfully tracked commit for ${participation.walletAddress} in study ${study.study_name} (${commitData.authorEmail})`);
       }
-
-      // 커밋 시간을 Unix 타임스탬프로 변환
-      const commitTimestamp = getUnixTimestamp(new Date(commitData.timestamp));
-
-      // 블록체인에 커밋 기록 (등록된 스터디 프록시에, 참가자의 지갑 주소로)
-      await this.blockchainService.trackCommit(participantStudy.walletAddress, commitTimestamp);
-
-      this.logger.log(`Successfully tracked commit for ${participantStudy.walletAddress} (${commitData.authorEmail})`);
     } catch (error) {
       this.logger.error('Failed to process commit', error);
       throw error;
