@@ -15,7 +15,7 @@ export class SchedulerService {
   /**
    * 매 시간마다 종료해야 할 스터디들 체크 및 종료 처리
    */
-  @Cron(CronExpression.EVERY_HOUR)
+  @Cron('5 * * * *') // 매시 5분에 실행
   async handleStudyClosures() {
     try {
       this.logger.log('Checking for studies to close...');

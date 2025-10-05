@@ -78,8 +78,11 @@ export class GitHubService {
           this.logger.log(`Commit time ${new Date(commitData.timestamp).toISOString()} is outside study hours for ${study.study_name}`);
           this.logger.log(`Commit timestamp: ${commitTimestamp}, Study start offset: ${study.study_start_time}s, Study end offset: ${study.study_end_time}s`);
           this.logger.log(`Commit time in KST: ${new Date(commitData.timestamp).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' })}`);
-          this.logger.log(`Study start time: ${Math.floor(study.study_start_time / 3600)}:${String(Math.floor((study.study_start_time % 3600) / 60)).padStart(2, '0')}`);
-          this.logger.log(`Study end time: ${Math.floor(study.study_end_time / 3600)}:${String(Math.floor((study.study_end_time % 3600) / 60)).padStart(2, '0')}`);
+          const startHour = Math.floor(study.study_start_time / 3600);
+          const startMin = Math.floor((study.study_start_time % 3600) / 60);
+          const endHour = Math.floor(study.study_end_time / 3600);
+          const endMin = Math.floor((study.study_end_time % 3600) / 60);
+          this.logger.log(`Study time: ${startHour}:${String(startMin).padStart(2, '0')} ~ ${endHour}:${String(endMin).padStart(2, '0')} (${endHour >= 24 ? '다음날 ' + (endHour-24) + ':' + String(endMin).padStart(2, '0') : endHour + ':' + String(endMin).padStart(2, '0')})`);
           continue;
         }
 
@@ -146,10 +149,15 @@ export class GitHubService {
     const actualStartTime = midnightTimestamp + studyStartTime;
     const actualEndTime = midnightTimestamp + studyEndTime;
 
-    // 새벽을 넘나드는 스터디인지 확인 (예: 23:00-01:00)
-    if (studyEndTime < studyStartTime) {
-      // 새벽을 넘나드는 경우: 시작시간부터 자정까지 또는 자정부터 종료시간까지
-      const nextDayEndTime = midnightTimestamp + 24 * 60 * 60 + studyEndTime;
+    // 새벽을 넘나드는 스터디인지 확인
+    // 조건: studyEndTime > 24시간(86400초) 또는 studyEndTime < studyStartTime
+    if (studyEndTime > 24 * 60 * 60 || studyEndTime < studyStartTime) {
+      // 새벽을 넘나드는 경우
+      // studyEndTime이 24시간을 넘으면 (예: 26:00 = 93600초) 실제로는 다음날 새벽 시간
+      const realEndTime = studyEndTime > 24 * 60 * 60 ? studyEndTime - 24 * 60 * 60 : studyEndTime;
+      const nextDayEndTime = midnightTimestamp + 24 * 60 * 60 + realEndTime;
+
+      // 시작시간 이후이거나 다음날 종료시간 이전이면 스터디 시간 내
       return (commitTimestamp >= actualStartTime) || (commitTimestamp <= nextDayEndTime);
     } else {
       // 같은 날 내에서 끝나는 경우
