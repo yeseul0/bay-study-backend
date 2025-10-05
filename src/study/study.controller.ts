@@ -76,31 +76,44 @@ export class StudyController {
       }>;
       participantCount: number;
       isParticipating: boolean;
+      hasRegisteredRepository: boolean;
     }>;
     message: string
   }> {
     try {
       const studies = await this.databaseService.getAllStudies();
 
+      const studiesWithRepoStatus = await Promise.all(
+        studies.map(async study => {
+          const hasRegisteredRepository = await this.databaseService.hasUserRegisteredRepository(
+            user.email,
+            study.proxy_address
+          );
+
+          return {
+            id: study.id,
+            proxyAddress: study.proxy_address,
+            studyName: study.study_name,
+            studyStartTime: study.study_start_time,
+            studyEndTime: study.study_end_time,
+            depositAmount: study.deposit_amount,
+            penaltyAmount: study.penalty_amount,
+            createdAt: new Date(study.created_at.getTime() + (9 * 60 * 60 * 1000)), // UTC+9 (한국시간) 변환
+            participants: study.user_studies?.map(us => ({
+              walletAddress: us.wallet_address,
+              githubEmail: us.user.github_email,
+              registeredAt: new Date(us.registered_at.getTime() + 9 * 60 * 60 * 1000), // UTC+9 (한국시간) 변환
+            })) || [],
+            participantCount: study.user_studies?.length || 0,
+            isParticipating: study.user_studies?.some(us => us.user.github_email === user.email) || false,
+            hasRegisteredRepository,
+          };
+        })
+      );
+
       return {
         success: true,
-        studies: studies.map(study => ({
-          id: study.id,
-          proxyAddress: study.proxy_address,
-          studyName: study.study_name,
-          studyStartTime: study.study_start_time,
-          studyEndTime: study.study_end_time,
-          depositAmount: study.deposit_amount,
-          penaltyAmount: study.penalty_amount,
-          createdAt: new Date(study.created_at.getTime() + (9 * 60 * 60 * 1000)), // UTC+9 (한국시간) 변환
-          participants: study.user_studies?.map(us => ({
-            walletAddress: us.wallet_address,
-            githubEmail: us.user.github_email,
-            registeredAt: new Date(us.registered_at.getTime() + 9 * 60 * 60 * 1000), // UTC+9 (한국시간) 변환
-          })) || [],
-          participantCount: study.user_studies?.length || 0,
-          isParticipating: study.user_studies?.some(us => us.user.github_email === user.email) || false,
-        })),
+        studies: studiesWithRepoStatus,
         message: `Found ${studies.length} studies`
       };
     } catch (error) {
@@ -280,6 +293,42 @@ export class StudyController {
       return {
         success: false,
         message: `Failed to get repositories: ${error.message}`
+      };
+    }
+  }
+
+  @Get('balances/all')
+  async getAllStudyBalances(): Promise<{
+    success: boolean;
+    studies?: Array<{
+      studyId: number;
+      studyName: string;
+      proxyAddress: string;
+      participants: Array<{
+        userId: number;
+        githubEmail: string;
+        walletAddress: string;
+        currentBalance: string;
+        depositAmount: string;
+        updatedAt: Date;
+      }>;
+    }>;
+    message: string;
+  }> {
+    try {
+      const allBalances = await this.databaseService.getAllStudyBalances();
+
+      const totalParticipants = allBalances.reduce((sum, study) => sum + study.participants.length, 0);
+
+      return {
+        success: true,
+        studies: allBalances,
+        message: `Found ${allBalances.length} studies with ${totalParticipants} total participants`
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to get all study balances: ${error.message}`
       };
     }
   }

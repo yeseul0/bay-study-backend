@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ethers } from 'ethers';
-import { getTodayMidnightTimestamp, getUnixTimestamp } from '../utils/time.util';
+import { getUnixTimestamp } from '../utils/time.util';
 import { StudyGroupABI } from './studygroupABI';
 
 @Injectable()
@@ -45,42 +45,91 @@ export class BlockchainService {
   }
 
   /**
-   * GitHub 커밋 정보를 받아서 컨트랙트의 trackCommit 함수를 호출
-   * @param participantAddress 참가자의 이더리움 주소
-   * @param commitTimestamp 커밋 시간 (ISO string 또는 Unix timestamp)
+   * 오늘 첫 번째 커밋인 경우 스터디 시작
+   * @param proxyAddress 스터디 컨트랙트 주소
+   * @param todayMidnight 오늘 자정 타임스탬프
    */
-  async trackCommit(participantAddress: string, commitTimestamp: string | number): Promise<void> {
+  async startTodayStudy(proxyAddress: string, todayMidnight: number): Promise<void> {
     try {
-      // 오늘 날짜의 00:00:00 UTC 타임스탬프 계산
-      const todayMidnight = getTodayMidnightTimestamp();
-
-      // 커밋 시간을 Unix 타임스탬프로 변환
-      let commitTime: number;
-      if (typeof commitTimestamp === 'string') {
-        commitTime = getUnixTimestamp(new Date(commitTimestamp));
-      } else {
-        commitTime = commitTimestamp;
-      }
-
-      this.logger.log(`Calling trackCommit for participant ${participantAddress}`);
+      this.logger.log(`Starting today's study for contract ${proxyAddress}`);
       this.logger.log(`Today midnight timestamp: ${todayMidnight}`);
-      this.logger.log(`Commit timestamp: ${commitTime}`);
 
-      // 컨트랙트의 trackCommit 함수 호출
-      const tx = await this.contract.trackCommit(
-        todayMidnight,        // 첫번째 인자: 오늘 날짜 00시 타임스탬프
-        participantAddress,   // 두번째 인자: 참가자 주소
-        commitTime           // 세번째 인자: 커밋 시간 타임스탬프
-      );
+      // 특정 스터디 컨트랙트에 연결
+      const studyContract = new ethers.Contract(proxyAddress, StudyGroupABI.output.abi, this.wallet);
 
-      this.logger.log(`Transaction sent: ${tx.hash}`);
+      // 컨트랙트의 startTodayStudy 함수 호출
+      const tx = await studyContract.startTodayStudy(todayMidnight);
+
+      this.logger.log(`startTodayStudy transaction sent: ${tx.hash}`);
 
       // 트랜잭션 완료 대기
       const receipt = await tx.wait();
-      this.logger.log(`Transaction confirmed in block: ${receipt.blockNumber}`);
+      this.logger.log(`startTodayStudy confirmed in block: ${receipt.blockNumber}`);
+
+    } catch (error) {
+      this.logger.error('Failed to start today study on blockchain', error);
+      throw error;
+    }
+  }
+
+  /**
+   * GitHub 커밋 정보를 받아서 컨트랙트의 trackCommit 함수를 호출
+   * @param proxyAddress 스터디 컨트랙트 주소
+   * @param participantAddress 참가자의 이더리움 주소
+   * @param commitTimestamp 커밋 시간 (Unix timestamp)
+   * @param studyDate 스터디 날짜 (자정 타임스탬프)
+   */
+  async trackCommit(proxyAddress: string, participantAddress: string, commitTimestamp: number, studyDate: number): Promise<void> {
+    try {
+      this.logger.log(`Calling trackCommit for participant ${participantAddress} in study ${proxyAddress}`);
+      this.logger.log(`Study date timestamp: ${studyDate} (${new Date(studyDate * 1000).toISOString()})`);
+      this.logger.log(`Commit timestamp: ${commitTimestamp} (${new Date(commitTimestamp * 1000).toISOString()})`);
+
+      // 특정 스터디 컨트랙트에 연결
+      const studyContract = new ethers.Contract(proxyAddress, StudyGroupABI.output.abi, this.wallet);
+
+      // 컨트랙트의 trackCommit 함수 호출
+      const tx = await studyContract.trackCommit(
+        studyDate,            // 첫번째 인자: 스터디 날짜 00시 타임스탬프
+        participantAddress,   // 두번째 인자: 참가자 주소
+        commitTimestamp      // 세번째 인자: 커밋 시간 타임스탬프
+      );
+
+      this.logger.log(`trackCommit transaction sent: ${tx.hash}`);
+
+      // 트랜잭션 완료 대기
+      const receipt = await tx.wait();
+      this.logger.log(`trackCommit confirmed in block: ${receipt.blockNumber}`);
 
     } catch (error) {
       this.logger.error('Failed to track commit on blockchain', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 스터디 종료 (벌금 계산 및 분배)
+   * @param proxyAddress 스터디 컨트랙트 주소
+   * @param studyDate 스터디 날짜 (자정 타임스탬프)
+   */
+  async closeStudy(proxyAddress: string, studyDate: number): Promise<void> {
+    try {
+      this.logger.log(`Closing study for contract ${proxyAddress} on date ${new Date(studyDate * 1000).toISOString()}`);
+
+      // 특정 스터디 컨트랙트에 연결
+      const studyContract = new ethers.Contract(proxyAddress, StudyGroupABI.output.abi, this.wallet);
+
+      // 컨트랙트의 closeStudy 함수 호출
+      const tx = await studyContract.closeStudy(studyDate);
+
+      this.logger.log(`closeStudy transaction sent: ${tx.hash}`);
+
+      // 트랜잭션 완료 대기
+      const receipt = await tx.wait();
+      this.logger.log(`closeStudy confirmed in block: ${receipt.blockNumber}`);
+
+    } catch (error) {
+      this.logger.error('Failed to close study on blockchain', error);
       throw error;
     }
   }

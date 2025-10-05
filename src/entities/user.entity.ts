@@ -1,6 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, CreateDateColumn, OneToMany } from 'typeorm';
 import { UserStudy } from './user-study.entity';
 import { Repository } from './repository.entity';
+import { CommitRecord } from './commit-record.entity';
 
 @Entity('users')
 export class User {
@@ -21,4 +22,7 @@ export class User {
 
   @OneToMany(() => Repository, repository => repository.user)
   repositories: Repository[];
+
+  @OneToMany(() => CommitRecord, commitRecord => commitRecord.user)
+  commit_records: CommitRecord[];
 }

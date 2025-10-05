@@ -67,15 +67,115 @@ export class GitHubService {
         // 커밋 시간을 Unix 타임스탬프로 변환
         const commitTimestamp = getUnixTimestamp(new Date(commitData.timestamp));
 
-        // 블록체인에 커밋 기록 (해당 스터디 프록시에, 참가자의 지갑 주소로)
-        await this.blockchainService.trackCommit(participation.walletAddress!, commitTimestamp);
+        // 스터디 시간 체크 (start_time과 end_time은 Unix timestamp)
+        const isWithinStudyTime = this.isCommitWithinStudyTime(
+          commitTimestamp,
+          study.study_start_time,
+          study.study_end_time
+        );
 
-        this.logger.log(`Successfully tracked commit for ${participation.walletAddress} in study ${study.study_name} (${commitData.authorEmail})`);
+        if (!isWithinStudyTime) {
+          this.logger.log(`Commit time ${new Date(commitData.timestamp).toISOString()} is outside study hours for ${study.study_name}`);
+          this.logger.log(`Study hours: ${new Date(study.study_start_time * 1000).toISOString()} - ${new Date(study.study_end_time * 1000).toISOString()}`);
+          continue;
+        }
+
+        this.logger.log(`Commit is within study hours for ${study.study_name}, recording to blockchain...`);
+
+        // 커밋 날짜 (YYYY-MM-DD 형식)
+        const commitDate = new Date(commitData.timestamp).toISOString().split('T')[0];
+
+        // 데이터베이스에 커밋 기록 저장 (하루 첫 번째 커밋만)
+        const commitRecord = await this.databaseService.recordCommit({
+          studyId: study.id,
+          userId: participation.userId!, // userId 추가 필요
+          date: commitDate,
+          commitTimestamp: commitTimestamp,
+          commitId: commitData.commitId,
+          commitMessage: commitData.message,
+          walletAddress: participation.walletAddress!
+        });
+
+        if (commitRecord.isFirstCommit) {
+          // 스터디 날짜 계산: 스터디 시작 시간을 기준으로 날짜 결정
+          const studyDate = this.calculateStudyDate(commitTimestamp, study.study_start_time, study.study_end_time);
+
+          // 해당 스터디에서 오늘 첫 번째 커밋인 경우 startTodayStudy 먼저 호출
+          if (commitRecord.isFirstStudyCommitToday) {
+            await this.blockchainService.startTodayStudy(study.proxy_address, studyDate);
+            this.logger.log(`Started today's study for ${study.study_name} (first commit of the day, study date: ${new Date(studyDate * 1000).toISOString()})`);
+          }
+
+          // 개별 커밋 트래킹 (같은 studyDate 사용)
+          await this.blockchainService.trackCommit(study.proxy_address, participation.walletAddress!, commitTimestamp, studyDate);
+          this.logger.log(`Successfully tracked FIRST commit for ${participation.walletAddress} in study ${study.study_name} (${commitData.authorEmail})`);
+        } else {
+          this.logger.log(`Commit already recorded for today in study ${study.study_name} - skipping blockchain call`);
+        }
       }
     } catch (error) {
       this.logger.error('Failed to process commit', error);
       throw error;
     }
+  }
+
+  /**
+   * 커밋 시간이 스터디 시간 내에 있는지 확인
+   * @param commitTimestamp 커밋 시간 (Unix timestamp)
+   * @param studyStartTime 스터디 시작 시간 (Unix timestamp)
+   * @param studyEndTime 스터디 종료 시간 (Unix timestamp)
+   */
+  private isCommitWithinStudyTime(
+    commitTimestamp: number,
+    studyStartTime: number,
+    studyEndTime: number
+  ): boolean {
+    // 커밋 시간이 스터디 시간 범위 내에 있는지 확인
+    return commitTimestamp >= studyStartTime && commitTimestamp <= studyEndTime;
+  }
+
+  /**
+   * 스터디 날짜 계산 (스터디 시작 시간 기준)
+   * 예: 11시-새벽1시 스터디에서 12시30분 커밋 → 11시 기준 날짜의 자정 타임스탬프
+   * @param commitTimestamp 커밋 시간 (Unix timestamp)
+   * @param studyStartTime 스터디 시작 시간 (Unix timestamp)
+   * @param studyEndTime 스터디 종료 시간 (Unix timestamp)
+   */
+  private calculateStudyDate(
+    commitTimestamp: number,
+    studyStartTime: number,
+    studyEndTime: number
+  ): number {
+    const commitDate = new Date(commitTimestamp * 1000);
+    const startDate = new Date(studyStartTime * 1000);
+    const endDate = new Date(studyEndTime * 1000);
+
+    // 스터디가 자정을 넘나드는지 확인 (예: 23:00-01:00)
+    const isOvernight = endDate.getTime() < startDate.getTime() ||
+                       (endDate.getDate() !== startDate.getDate());
+
+    let studyBaseDate: Date;
+
+    if (isOvernight) {
+      // 자정을 넘나드는 스터디의 경우
+      // 커밋 시간이 스터디 종료 시간 이전이면서 자정 이후라면, 스터디 시작일 기준
+      if (commitDate.getHours() < 12) { // 오전 시간대 (자정 이후)
+        // 스터디 시작일을 기준으로 함 (하루 전)
+        studyBaseDate = new Date(startDate);
+      } else {
+        // 오후/저녁 시간대면 해당 날짜 기준
+        studyBaseDate = new Date(commitDate);
+      }
+    } else {
+      // 자정을 넘나들지 않는 스터디의 경우 커밋 날짜 기준
+      studyBaseDate = new Date(commitDate);
+    }
+
+    // 해당 날짜의 자정 타임스탬프 반환
+    const midnight = new Date(studyBaseDate);
+    midnight.setHours(0, 0, 0, 0);
+
+    return Math.floor(midnight.getTime() / 1000);
   }
 
   /**

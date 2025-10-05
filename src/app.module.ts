@@ -1,22 +1,27 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ScheduleModule } from '@nestjs/schedule';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { GitHubModule } from './github/github.module';
 import { StudyModule } from './study/study.module';
 import { AuthModule } from './auth/auth.module';
+import { SchedulerModule } from './scheduler/scheduler.module';
 import { BlockchainService } from './blockchain/blockchain.service';
 import { User } from './entities/user.entity';
 import { Study } from './entities/study.entity';
 import { UserStudy } from './entities/user-study.entity';
 import { Repository } from './entities/repository.entity';
+import { CommitRecord } from './entities/commit-record.entity';
+import { Balance } from './entities/balance.entity';
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
     }),
+    ScheduleModule.forRoot(),
     TypeOrmModule.forRoot({
       type: 'mysql',
       host: process.env.DB_HOST || 'localhost',
@@ -24,12 +29,13 @@ import { Repository } from './entities/repository.entity';
       username: process.env.DB_USERNAME || 'root',
       password: process.env.DB_PASSWORD || '',
       database: process.env.DB_DATABASE || 'bay_study',
-      entities: [User, Study, UserStudy, Repository],
+      entities: [User, Study, UserStudy, Repository, CommitRecord, Balance],
       synchronize: process.env.NODE_ENV !== 'production',
     }),
     GitHubModule,
     StudyModule,
     AuthModule,
+    SchedulerModule,
   ],
   controllers: [AppController],
   providers: [AppService, BlockchainService],

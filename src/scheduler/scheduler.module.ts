@@ -1,10 +1,9 @@
 import { Module } from '@nestjs/common';
-import { TypeOrmModule } from '@nestjs/typeorm';
-import { GitHubController } from './github.controller';
-import { GitHubService } from './github.service';
+import { SchedulerService } from './scheduler.service';
+import { SchedulerController } from './scheduler.controller';
 import { DatabaseService } from '../database/database.service';
 import { BlockchainService } from '../blockchain/blockchain.service';
-import { AuthModule } from '../auth/auth.module';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { User } from '../entities/user.entity';
 import { Study } from '../entities/study.entity';
 import { UserStudy } from '../entities/user-study.entity';
@@ -15,10 +14,9 @@ import { Balance } from '../entities/balance.entity';
 @Module({
   imports: [
     TypeOrmModule.forFeature([User, Study, UserStudy, Repository, CommitRecord, Balance]),
-    AuthModule,
   ],
-  controllers: [GitHubController],
-  providers: [GitHubService, DatabaseService, BlockchainService],
-  exports: [GitHubService],
+  controllers: [SchedulerController],
+  providers: [SchedulerService, DatabaseService, BlockchainService],
+  exports: [SchedulerService],
 })
-export class GitHubModule {}
+export class SchedulerModule {}

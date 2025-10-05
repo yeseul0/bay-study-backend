@@ -10,10 +10,12 @@ import { User } from '../entities/user.entity';
 import { Study } from '../entities/study.entity';
 import { UserStudy } from '../entities/user-study.entity';
 import { Repository } from '../entities/repository.entity';
+import { CommitRecord } from '../entities/commit-record.entity';
+import { Balance } from '../entities/balance.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Study, UserStudy, Repository]),
+    TypeOrmModule.forFeature([User, Study, UserStudy, Repository, CommitRecord, Balance]),
     AuthModule
   ],
   controllers: [StudyController],

@@ -5,6 +5,8 @@ import { User } from '../entities/user.entity';
 import { Study } from '../entities/study.entity';
 import { UserStudy } from '../entities/user-study.entity';
 import { Repository } from '../entities/repository.entity';
+import { CommitRecord } from '../entities/commit-record.entity';
+import { Balance } from '../entities/balance.entity';
 
 export interface RegisterParticipantDto {
   walletAddress: string;
@@ -25,6 +27,10 @@ export class DatabaseService {
     private userStudyRepository: TypeOrmRepository<UserStudy>,
     @InjectRepository(Repository)
     private repositoryRepository: TypeOrmRepository<Repository>,
+    @InjectRepository(CommitRecord)
+    private commitRecordRepository: TypeOrmRepository<CommitRecord>,
+    @InjectRepository(Balance)
+    private balanceRepository: TypeOrmRepository<Balance>,
   ) {}
 
   /**
@@ -195,6 +201,7 @@ export class DatabaseService {
   async isUserParticipantInStudy(githubEmail: string, proxyAddress: string): Promise<{
     isParticipant: boolean;
     walletAddress?: string;
+    userId?: number;
   }> {
     const userStudy = await this.userStudyRepository
       .createQueryBuilder('us')
@@ -207,11 +214,28 @@ export class DatabaseService {
     if (userStudy) {
       return {
         isParticipant: true,
-        walletAddress: userStudy.wallet_address
+        walletAddress: userStudy.wallet_address,
+        userId: userStudy.user_id
       };
     }
 
     return { isParticipant: false };
+  }
+
+  /**
+   * 사용자가 특정 스터디에 레포지토리를 등록했는지 확인
+   */
+  async hasUserRegisteredRepository(githubEmail: string, proxyAddress: string): Promise<boolean> {
+    const count = await this.repositoryRepository
+      .createQueryBuilder('repo')
+      .leftJoin('repo.user', 'user')
+      .leftJoin('repo.study', 'study')
+      .where('user.github_email = :email', { email: githubEmail.toLowerCase() })
+      .andWhere('study.proxy_address = :proxyAddress', { proxyAddress: proxyAddress.toLowerCase() })
+      .andWhere('repo.is_active = :isActive', { isActive: true })
+      .getCount();
+
+    return count > 0;
   }
 
   /**
@@ -388,6 +412,61 @@ export class DatabaseService {
   }
 
   /**
+   * 종료해야 할 스터디들 조회 (커밋 기록이 있고 종료 시간이 지난 스터디들)
+   */
+  async getStudiesToClose(): Promise<Array<{
+    proxyAddress: string;
+    studyName: string;
+    studyDate: number; // 자정 타임스탬프
+    studyEndTime: number;
+  }>> {
+    const now = Math.floor(Date.now() / 1000); // 현재 Unix 타임스탬프
+
+    // 1. 오늘과 어제 날짜 계산 (시간대 고려)
+    const today = new Date();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+
+    const todayDate = today.toISOString().split('T')[0]; // YYYY-MM-DD
+    const yesterdayDate = yesterday.toISOString().split('T')[0];
+
+    // 2. 커밋 기록이 있는 스터디들 조회
+    const commitRecords = await this.commitRecordRepository
+      .createQueryBuilder('cr')
+      .leftJoinAndSelect('cr.study', 'study')
+      .where('cr.date IN (:...dates)', { dates: [todayDate, yesterdayDate] })
+      .groupBy('cr.study_id, cr.date')
+      .getMany();
+
+    const studiesToClose: Array<{
+      proxyAddress: string;
+      studyName: string;
+      studyDate: number;
+      studyEndTime: number;
+    }> = [];
+
+    for (const record of commitRecords) {
+      const study = record.study;
+      const recordDate = record.date;
+
+      // 해당 날짜의 자정 타임스탬프 계산
+      const studyDate = Math.floor(new Date(recordDate + 'T00:00:00.000Z').getTime() / 1000);
+
+      // 스터디 종료 시간이 지났는지 확인
+      if (now > study.study_end_time) {
+        studiesToClose.push({
+          proxyAddress: study.proxy_address,
+          studyName: study.study_name,
+          studyDate,
+          studyEndTime: study.study_end_time
+        });
+      }
+    }
+
+    return studiesToClose;
+  }
+
+  /**
    * 전체 등록 현황 조회 (관리자용)
    */
   async getAllRegistrations(): Promise<any> {
@@ -411,5 +490,201 @@ export class DatabaseService {
     });
 
     return result;
+  }
+
+  /**
+   * 커밋 기록 저장 (하루에 첫 번째 커밋만 기록)
+   */
+  async recordCommit(data: {
+    studyId: number;
+    userId: number;
+    date: string; // 'YYYY-MM-DD'
+    commitTimestamp: number;
+    commitId: string;
+    commitMessage: string;
+    walletAddress: string;
+  }): Promise<{ isFirstCommit: boolean; isFirstStudyCommitToday: boolean; commitRecord?: CommitRecord }> {
+    const { studyId, userId, date, commitTimestamp, commitId, commitMessage, walletAddress } = data;
+
+    // 사용자의 해당 날짜 커밋 기록이 있는지 확인
+    const existingRecord = await this.commitRecordRepository.findOne({
+      where: {
+        study_id: studyId,
+        user_id: userId,
+        date: date
+      }
+    });
+
+    if (existingRecord) {
+      this.logger.log(`Commit record already exists for user ${userId} in study ${studyId} on ${date}`);
+      return { isFirstCommit: false, isFirstStudyCommitToday: false, commitRecord: existingRecord };
+    }
+
+    // 해당 스터디에서 오늘 첫 번째 커밋인지 확인 (모든 참가자 통틀어서)
+    const todayStudyCommitCount = await this.commitRecordRepository.count({
+      where: {
+        study_id: studyId,
+        date: date
+      }
+    });
+
+    const isFirstStudyCommitToday = todayStudyCommitCount === 0;
+
+    // 첫 번째 커밋이므로 기록
+    const commitRecord = this.commitRecordRepository.create({
+      study_id: studyId,
+      user_id: userId,
+      date: date,
+      commit_timestamp: commitTimestamp,
+      commit_id: commitId,
+      commit_message: commitMessage,
+      wallet_address: walletAddress
+    });
+
+    const savedRecord = await this.commitRecordRepository.save(commitRecord);
+    this.logger.log(`Recorded first commit for user ${userId} in study ${studyId} on ${date} at ${new Date(commitTimestamp * 1000).toISOString()} (isFirstStudyCommitToday: ${isFirstStudyCommitToday})`);
+
+    return { isFirstCommit: true, isFirstStudyCommitToday, commitRecord: savedRecord };
+  }
+
+  /**
+   * 스터디별 커밋 기록 조회
+   */
+  async getStudyCommitRecords(proxyAddress: string): Promise<Array<{
+    date: string;
+    participantEmail: string;
+    participantWallet: string;
+    commitTime: Date;
+    commitMessage: string;
+    commitId: string;
+  }>> {
+    const records = await this.commitRecordRepository
+      .createQueryBuilder('cr')
+      .leftJoinAndSelect('cr.user', 'user')
+      .leftJoinAndSelect('cr.study', 'study')
+      .where('study.proxy_address = :proxyAddress', { proxyAddress: proxyAddress.toLowerCase() })
+      .orderBy('cr.date', 'DESC')
+      .addOrderBy('cr.commit_timestamp', 'ASC')
+      .getMany();
+
+    return records.map(record => ({
+      date: record.date,
+      participantEmail: record.user.github_email,
+      participantWallet: record.wallet_address,
+      commitTime: new Date(record.commit_timestamp * 1000),
+      commitMessage: record.commit_message,
+      commitId: record.commit_id
+    }));
+  }
+
+  /**
+   * 예치금 잔액 업데이트 (upsert)
+   */
+  async updateBalance(data: {
+    userId: number;
+    studyId: number;
+    walletAddress: string;
+    currentBalance: string;
+  }): Promise<Balance> {
+    // 기존 레코드 찾기
+    let balanceRecord = await this.balanceRepository.findOne({
+      where: { user_id: data.userId, study_id: data.studyId }
+    });
+
+    if (balanceRecord) {
+      // 업데이트
+      balanceRecord.current_balance = data.currentBalance;
+      balanceRecord.wallet_address = data.walletAddress;
+    } else {
+      // 새로 생성
+      balanceRecord = this.balanceRepository.create({
+        user_id: data.userId,
+        study_id: data.studyId,
+        wallet_address: data.walletAddress,
+        current_balance: data.currentBalance
+      });
+    }
+
+    const savedRecord = await this.balanceRepository.save(balanceRecord);
+    this.logger.log(`Updated balance: ${data.currentBalance} wei for user ${data.userId} in study ${data.studyId}`);
+
+    return savedRecord;
+  }
+
+  /**
+   * 특정 스터디의 모든 참가자 예치금 현황 조회
+   */
+  async getStudyBalances(proxyAddress: string): Promise<Array<{
+    userId: number;
+    githubEmail: string;
+    walletAddress: string;
+    currentBalance: string;
+    depositAmount: string;
+    updatedAt: Date;
+  }>> {
+    // 스터디 조회
+    const study = await this.studyRepository.findOne({
+      where: { proxy_address: proxyAddress.toLowerCase() }
+    });
+
+    if (!study) {
+      return [];
+    }
+
+    // 해당 스터디의 예치금 기록들 조회
+    const balances = await this.balanceRepository
+      .createQueryBuilder('b')
+      .leftJoinAndSelect('b.user', 'user')
+      .where('b.study_id = :studyId', { studyId: study.id })
+      .getMany();
+
+    return balances.map(balance => ({
+      userId: balance.user_id,
+      githubEmail: balance.user.github_email,
+      walletAddress: balance.wallet_address,
+      currentBalance: balance.current_balance,
+      depositAmount: study.deposit_amount,
+      updatedAt: balance.updated_at
+    }));
+  }
+
+  /**
+   * 모든 스터디의 예치금 현황 조회 (통합 API)
+   */
+  async getAllStudyBalances(): Promise<Array<{
+    studyId: number;
+    studyName: string;
+    proxyAddress: string;
+    participants: Array<{
+      userId: number;
+      githubEmail: string;
+      walletAddress: string;
+      currentBalance: string;
+      depositAmount: string;
+      updatedAt: Date;
+    }>;
+  }>> {
+    // 모든 스터디와 해당 예치금 기록들 조회
+    const studies = await this.studyRepository
+      .createQueryBuilder('study')
+      .leftJoinAndSelect('study.balances', 'balance')
+      .leftJoinAndSelect('balance.user', 'user')
+      .orderBy('study.created_at', 'DESC')
+      .addOrderBy('user.github_email', 'ASC')
+      .getMany();
+
+    return studies.map(study => ({
+      studyId: study.id,
+      studyName: study.study_name,
+      proxyAddress: study.proxy_address,
+      participants: study.balances?.map(balance => ({
+        userId: balance.user_id,
+        githubEmail: balance.user.github_email,
+        walletAddress: balance.wallet_address,
+        currentBalance: balance.current_balance,
+        depositAmount: study.deposit_amount,
+        updatedAt: balance.updated_at
+      })) || []
+    }));
   }
 }
