@@ -119,6 +119,21 @@ export class GitHubService {
 
       this.logger.log(`Creating webhook for ${owner}/${cleanRepo}`);
 
+      // 기존 웹훅 확인
+      const existingWebhooks = await this.getRepositoryWebhooks(owner, cleanRepo, accessToken);
+      const targetUrl = `${this.configService.get('WEBHOOK_PAYLOAD_URL')}/github/webhook`;
+
+      const existingWebhook = existingWebhooks.find(hook =>
+        hook.config?.url === targetUrl &&
+        hook.events.includes('push') &&
+        hook.active
+      );
+
+      if (existingWebhook) {
+        this.logger.log(`Webhook already exists for ${owner}/${cleanRepo} (ID: ${existingWebhook.id})`);
+        return; // 이미 존재하므로 생성하지 않음
+      }
+
       // 웹훅 설정
       const webhookSecret = this.configService.get('GITHUB_WEBHOOK_SECRET');
       if (!webhookSecret) {
@@ -169,6 +184,30 @@ export class GitHubService {
       }
 
       throw new Error(`Failed to create webhook: ${error.message}`);
+    }
+  }
+
+  /**
+   * 레포지토리의 기존 웹훅 목록 조회
+   */
+  private async getRepositoryWebhooks(owner: string, repo: string, accessToken: string): Promise<any[]> {
+    try {
+      const response = await axios.get(`https://api.github.com/repos/${owner}/${repo}/hooks`, {
+        headers: {
+          'Authorization': `token ${accessToken}`,
+          'Accept': 'application/vnd.github.v3+json',
+          'User-Agent': 'Bay-Study-Backend'
+        }
+      });
+
+      return response.data;
+    } catch (error) {
+      if (error.response?.status === 404) {
+        this.logger.warn(`Repository ${owner}/${repo} not found or no access`);
+        return [];
+      }
+      this.logger.error(`Failed to get webhooks for ${owner}/${repo}`, error);
+      return [];
     }
   }
 

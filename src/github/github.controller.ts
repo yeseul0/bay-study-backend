@@ -1,5 +1,6 @@
 import { Controller, Post, Get, Body, Logger, HttpStatus, HttpCode, UseGuards, Headers } from '@nestjs/common';
 import { GitHubService } from './github.service';
+import { DatabaseService } from '../database/database.service';
 import { JwtAuthGuard } from '../auth/jwt-auth.guard';
 import { CurrentUser } from '../auth/user.decorator';
 import type { JwtPayload } from '../auth/jwt.service';
@@ -50,7 +51,10 @@ export interface GitHubWebhookPayload {
 export class GitHubController {
   private readonly logger = new Logger(GitHubController.name);
 
-  constructor(private readonly githubService: GitHubService) {}
+  constructor(
+    private readonly githubService: GitHubService,
+    private readonly databaseService: DatabaseService,
+  ) {}
 
   /**
    * 사용자의 GitHub 레포지토리 목록 조회
@@ -202,6 +206,33 @@ export class GitHubController {
 
     // 전체 페이로드 (축약버전)
     this.logger.log('📋 Full payload keys:', Object.keys(body));
+
+    // 🔍 레포지토리 URL로 등록된 스터디들 확인 (테스트용)
+    if (body.repository?.html_url) {
+      this.logger.log(`🔍 Checking studies for repository: ${body.repository.html_url}`);
+
+      // 비동기로 스터디 찾기
+      setImmediate(async () => {
+        try {
+          const studies = await this.databaseService.findStudiesByRepository(body.repository.html_url);
+          this.logger.log(`📚 Found ${studies.length} studies for this repository:`);
+
+          if (studies.length > 0) {
+            studies.forEach((study, index) => {
+              this.logger.log(`  📖 Study ${index + 1}:`);
+              this.logger.log(`    Name: ${study.study_name}`);
+              this.logger.log(`    Proxy: ${study.proxy_address}`);
+              this.logger.log(`    Start: ${new Date(study.study_start_time * 1000).toISOString()}`);
+              this.logger.log(`    End: ${new Date(study.study_end_time * 1000).toISOString()}`);
+            });
+          } else {
+            this.logger.log('    ❌ No studies found for this repository');
+          }
+        } catch (error) {
+          this.logger.error('Failed to find studies for repository', error);
+        }
+      });
+    }
 
     return Promise.resolve({ success: true, data: body });
   }
