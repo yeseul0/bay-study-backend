@@ -526,9 +526,22 @@ export class DatabaseService {
       const studyDateKST = new Date(recordDate + 'T00:00:00');
       const studyDate = Math.floor(studyDateKST.getTime() / 1000);
 
-      // 스터디 종료 시간이 지났는지 확인 (KST 기준)
-      // study.study_end_time은 자정부터의 오프셋이므로 해당 날짜 자정에 더해서 비교
-      const actualEndTime = studyDate + study.study_end_time;
+      // 자정 넘나드는 스터디인지 확인 (끝 시간이 24시간 이상이면 자정 넘나듦)
+      const isOvernight = study.study_end_time >= 86400;
+
+      let actualEndTime: number;
+
+      if (isOvernight) {
+        // 자정 넘나드는 스터디: 다음날로 계산
+        const nextDayMidnight = studyDate + 86400; // 다음날 자정
+        const endTimeNextDay = (study.study_end_time % 86400); // 24시간 넘어간 부분
+        actualEndTime = nextDayMidnight + endTimeNextDay;
+      } else {
+        // 당일 완료 스터디: 기존 방식
+        actualEndTime = studyDate + study.study_end_time;
+      }
+
+      this.logger.log(`Checking study: ${study.study_name}, isOvernight: ${isOvernight}, actualEndTime: ${new Date(actualEndTime * 1000).toISOString()}, now: ${new Date(nowKSTTimestamp * 1000).toISOString()}`);
 
       if (nowKSTTimestamp > actualEndTime) {
         studiesToClose.push({
