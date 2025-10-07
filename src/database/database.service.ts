@@ -522,8 +522,17 @@ export class DatabaseService {
       const study = record.study;
       const recordDate = record.date;
 
+      this.logger.log(`Processing record: study=${study.study_name}, date=${recordDate}`);
+      this.logger.log(`Study times: start=${study.study_start_time}s (${Math.floor(study.study_start_time/3600)}:${Math.floor((study.study_start_time%3600)/60)}), end=${study.study_end_time}s (${Math.floor(study.study_end_time/3600)}:${Math.floor((study.study_end_time%3600)/60)})`);
+
       // KST 기준 해당 날짜의 자정 타임스탬프 계산
       const studyDateKST = new Date(recordDate + 'T00:00:00');
+
+      if (isNaN(studyDateKST.getTime())) {
+        this.logger.error(`Invalid date: ${recordDate}, skipping...`);
+        continue;
+      }
+
       const studyDate = Math.floor(studyDateKST.getTime() / 1000);
 
       // 자정 넘나드는 스터디인지 확인 (끝 시간이 24시간 이상이면 자정 넘나듦)
@@ -541,7 +550,9 @@ export class DatabaseService {
         actualEndTime = studyDate + study.study_end_time;
       }
 
-      this.logger.log(`Checking study: ${study.study_name}, isOvernight: ${isOvernight}, actualEndTime: ${new Date(actualEndTime * 1000).toISOString()}, now: ${new Date(nowKSTTimestamp * 1000).toISOString()}`);
+      this.logger.log(`Checking study: ${study.study_name}, isOvernight: ${isOvernight}`);
+      this.logger.log(`actualEndTime timestamp: ${actualEndTime}, ISO: ${new Date(actualEndTime * 1000).toISOString()}`);
+      this.logger.log(`nowKSTTimestamp: ${nowKSTTimestamp}, ISO: ${new Date(nowKSTTimestamp * 1000).toISOString()}`);
 
       if (nowKSTTimestamp > actualEndTime) {
         studiesToClose.push({

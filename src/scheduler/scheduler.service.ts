@@ -15,7 +15,7 @@ export class SchedulerService {
   /**
    * 매 시간마다 종료해야 할 스터디들 체크 및 종료 처리
    */
-  @Cron('20 * * * *', { timeZone: 'Asia/Seoul' }) // KST 기준 매시 20분에 실행 (테스트용)
+  @Cron('*/30 * * * *', { timeZone: 'Asia/Seoul' }) // KST 기준 30분마다 실행 (0분, 30분)
   async handleStudyClosures() {
     try {
       this.logger.log('Checking for studies to close...');
