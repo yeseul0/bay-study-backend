@@ -360,4 +360,142 @@ export class StudyController {
     }
   }
 
+  @Get('my-participations')
+  @UseGuards(JwtAuthGuard)
+  async getMyParticipations(@CurrentUser() user: JwtPayload): Promise<{
+    success: boolean;
+    participations?: Array<{
+      id: number;
+      studyName: string;
+      proxyAddress: string;
+      walletAddress: string;
+      registeredAt: Date;
+    }>;
+    message: string;
+  }> {
+    try {
+      const participations = await this.databaseService.getUserParticipations(user.email);
+
+      return {
+        success: true,
+        participations,
+        message: `Found ${participations.length} participations`
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to get participations: ${error.message}`
+      };
+    }
+  }
+
+  @Delete('my-participations')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  async removeMyParticipations(@CurrentUser() user: JwtPayload): Promise<{
+    success: boolean;
+    message: string;
+    deletedCount: number;
+  }> {
+    try {
+      const result = await this.databaseService.removeUserParticipation(user.email);
+      return result;
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to remove participations: ${error.message}`,
+        deletedCount: 0
+      };
+    }
+  }
+
+  @Post('emergency-withdraw')
+  @HttpCode(HttpStatus.OK)
+  async emergencyWithdraw(@Body() body: { githubEmail: string; proxyAddress: string }): Promise<{
+    success: boolean;
+    message: string;
+  }> {
+    try {
+      await this.databaseService.withdrawFromStudy(body.githubEmail, body.proxyAddress);
+      return {
+        success: true,
+        message: `Successfully withdrew ${body.githubEmail} from study ${body.proxyAddress}`
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to withdraw: ${error.message}`
+      };
+    }
+  }
+
+  @Post('sync-blockchain')
+  @HttpCode(HttpStatus.OK)
+  async syncBlockchainData(@Body() body: { githubEmail: string; walletAddress: string; proxyAddress: string }): Promise<{
+    success: boolean;
+    message: string;
+    blockchainData?: any;
+  }> {
+    try {
+      // 블록체인에서 실제 잔액 확인
+      const blockchainService = this.factoryService['blockchainService'] ||
+        this.factoryService.constructor.prototype.blockchainService ||
+        require('../blockchain/blockchain.service').BlockchainService;
+
+      if (!blockchainService) {
+        return {
+          success: false,
+          message: 'Blockchain service not available'
+        };
+      }
+
+      // 임시로 직접 블록체인 조회
+      const { ethers } = require('ethers');
+      const { StudyGroupABI } = require('../blockchain/studygroupABI');
+
+      const provider = new ethers.JsonRpcProvider(process.env.RPC_URL);
+      const wallet = new ethers.Wallet(process.env.PRIVATE_KEY, provider);
+      const studyContract = new ethers.Contract(body.proxyAddress, StudyGroupABI, wallet);
+
+      // 참여자 잔액 조회
+      const balanceRaw = await studyContract.balances(body.walletAddress);
+      const balanceUSDC = ethers.formatUnits(balanceRaw, 6);
+
+      if (parseFloat(balanceUSDC) > 0) {
+        // 블록체인에 잔액이 있으면 DB에 참여 기록 추가
+        await this.databaseService.registerParticipant({
+          walletAddress: body.walletAddress,
+          proxyAddress: body.proxyAddress,
+          githubEmail: body.githubEmail
+        });
+
+        return {
+          success: true,
+          message: `Successfully synced blockchain data. Found balance: ${balanceUSDC} USDC`,
+          blockchainData: {
+            walletAddress: body.walletAddress,
+            balance: balanceUSDC,
+            isParticipant: true
+          }
+        };
+      } else {
+        return {
+          success: false,
+          message: `No balance found for ${body.walletAddress} in study ${body.proxyAddress}`,
+          blockchainData: {
+            walletAddress: body.walletAddress,
+            balance: balanceUSDC,
+            isParticipant: false
+          }
+        };
+      }
+
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to sync blockchain data: ${error.message}`
+      };
+    }
+  }
+
 }

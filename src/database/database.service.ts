@@ -760,4 +760,78 @@ export class DatabaseService {
       })) || []
     }));
   }
+
+  /**
+   * 특정 사용자의 스터디 참여 기록 조회
+   */
+  async getUserParticipations(githubEmail: string): Promise<Array<{
+    id: number;
+    studyName: string;
+    proxyAddress: string;
+    walletAddress: string;
+    registeredAt: Date;
+  }>> {
+    const userStudies = await this.userStudyRepository
+      .createQueryBuilder('us')
+      .leftJoinAndSelect('us.user', 'user')
+      .leftJoinAndSelect('us.study', 'study')
+      .where('user.github_email = :githubEmail', { githubEmail })
+      .orderBy('us.registered_at', 'DESC')
+      .getMany();
+
+    return userStudies.map(us => ({
+      id: us.id,
+      studyName: us.study.study_name,
+      proxyAddress: us.study.proxy_address,
+      walletAddress: us.wallet_address,
+      registeredAt: us.registered_at
+    }));
+  }
+
+  /**
+   * 특정 사용자의 스터디 참여 기록 삭제
+   */
+  async removeUserParticipation(githubEmail: string, studyId?: number): Promise<{
+    success: boolean;
+    message: string;
+    deletedCount: number;
+  }> {
+    try {
+      let query = this.userStudyRepository
+        .createQueryBuilder('us')
+        .leftJoin('us.user', 'user')
+        .where('user.github_email = :githubEmail', { githubEmail });
+
+      if (studyId) {
+        query = query.andWhere('us.study_id = :studyId', { studyId });
+      }
+
+      const participations = await query.getMany();
+
+      if (participations.length === 0) {
+        return {
+          success: false,
+          message: '삭제할 참여 기록이 없습니다.',
+          deletedCount: 0
+        };
+      }
+
+      const result = await this.userStudyRepository.remove(participations);
+
+      this.logger.log(`Removed ${result.length} participation records for user ${githubEmail}`);
+
+      return {
+        success: true,
+        message: `${result.length}개의 참여 기록이 삭제되었습니다.`,
+        deletedCount: result.length
+      };
+    } catch (error) {
+      this.logger.error('Failed to remove user participation:', error);
+      return {
+        success: false,
+        message: `삭제 실패: ${error.message}`,
+        deletedCount: 0
+      };
+    }
+  }
 }
