@@ -202,22 +202,20 @@ export class GitHubService {
     // KST 기준으로 날짜 계산
     let studyBaseDate: Date;
 
-    // 스터디가 자정을 넘나드는지 확인 (예: 23:00-01:00)
-    const isOvernight = Number(studyEndTime) < Number(studyStartTime);
+    // 스터디가 자정을 넘나드는지 확인: 끝 offset이 24시간(86400초)을 넘으면 자정 넘나듦
+    const isOvernight = Number(studyEndTime) >= 86400;
 
     if (isOvernight) {
-      // 자정을 넘나드는 스터디의 경우
+      // 자정을 넘나드는 스터디: 커밋이 새벽이면 전날 기준, 저녁이면 당일 기준
       const commitHourKST = commitDateKST.getUTCHours();
-      const commitMinuteKST = commitDateKST.getUTCMinutes();
-      const commitSecondsFromMidnight = commitHourKST * 3600 + commitMinuteKST * 60 + commitDateKST.getUTCSeconds();
+      const endHour = Math.floor((Number(studyEndTime) % 86400) / 3600); // 24시간 넘어간 부분을 새벽 시간으로 변환
 
-      // 자정 넘나드는 스터디: 새벽 시간대는 전날 기준, 저녁 시간대는 당일 기준
-      if (commitHourKST < 12) { // 오전(새벽) 시간대
-        // 전날 자정을 기준으로 함 (스터디 시작일)
+      if (commitHourKST <= endHour) {
+        // 커밋이 스터디 종료 시간 이전의 새벽이면 전날 자정 기준
         studyBaseDate = new Date(commitDateKST);
         studyBaseDate.setUTCDate(studyBaseDate.getUTCDate() - 1);
       } else {
-        // 오후/저녁 시간대면 해당 날짜 기준
+        // 커밋이 스터디 시작 시간 이후면 당일 자정 기준
         studyBaseDate = new Date(commitDateKST);
       }
     } else {
