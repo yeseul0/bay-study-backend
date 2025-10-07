@@ -88,19 +88,13 @@ export class GitHubService {
 
         this.logger.log(`Commit is within study hours for ${study.study_name}, recording to blockchain...`);
 
-        // 디버그: 실제 계산된 시간 출력
-        const debugCommitDate = new Date(commitTimestamp * 1000);
-        const kstOffset = 9 * 60 * 60 * 1000;
-        const commitKST = new Date(debugCommitDate.getTime() + kstOffset);
-        const commitDateMidnight = new Date(commitKST.getFullYear(), commitKST.getMonth(), commitKST.getDate());
-        const midnightTimestamp = Math.floor(commitDateMidnight.getTime() / 1000) - kstOffset / 1000;
-        const actualStartTime = midnightTimestamp + study.study_start_time;
-        const actualEndTime = midnightTimestamp + study.study_end_time;
+        // 디버그: offset 정보 출력
+        this.logger.log(`DEBUG - Study start offset: ${study.study_start_time}s`);
+        this.logger.log(`DEBUG - Study end offset: ${study.study_end_time}s`);
+        this.logger.log(`DEBUG - Commit time: ${new Date(commitTimestamp * 1000).toISOString()}`);
 
-        this.logger.log(`DEBUG - Commit timestamp: ${commitTimestamp}`);
-        this.logger.log(`DEBUG - Study start timestamp: ${actualStartTime}`);
-        this.logger.log(`DEBUG - Study end timestamp: ${actualEndTime}`);
-        this.logger.log(`DEBUG - Midnight timestamp: ${midnightTimestamp}`);
+        const studyDate = this.calculateStudyDate(commitTimestamp, study.study_start_time, study.study_end_time);
+        this.logger.log(`DEBUG - Study date (midnight): ${studyDate} = ${new Date(studyDate * 1000).toISOString()}`);
 
         // 커밋 날짜 (YYYY-MM-DD 형식)
         const commitDateString = new Date(commitData.timestamp).toISOString().split('T')[0];
@@ -160,8 +154,8 @@ export class GitHubService {
     const midnightTimestamp = Math.floor((commitDateMidnight.getTime() - kstOffset) / 1000); // KST 자정을 UTC로
 
     // 스터디 시작/종료 시간 계산
-    const actualStartTime = midnightTimestamp + studyStartTime;
-    const actualEndTime = midnightTimestamp + studyEndTime;
+    const actualStartTime = midnightTimestamp + Number(studyStartTime);
+    const actualEndTime = midnightTimestamp + Number(studyEndTime);
 
     // 새벽을 넘나드는 스터디인지 확인
     // 조건: studyEndTime > 24시간(86400초) 또는 studyEndTime < studyStartTime
