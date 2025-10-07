@@ -96,8 +96,12 @@ export class GitHubService {
         const studyDate = this.calculateStudyDate(commitTimestamp, study.study_start_time, study.study_end_time);
         this.logger.log(`DEBUG - Study date (midnight): ${studyDate} = ${new Date(studyDate * 1000).toISOString()}`);
 
-        // 커밋 날짜 (YYYY-MM-DD 형식)
-        const commitDateString = new Date(commitData.timestamp).toISOString().split('T')[0];
+        // 스터디 날짜 계산 (블록체인과 동일한 기준)
+        const studyDate = this.calculateStudyDate(commitTimestamp, study.study_start_time, study.study_end_time);
+
+        // 스터디 날짜에 해당하는 한국 날짜로 DB 기록
+        const studyDateKorean = new Date((studyDate + 9 * 3600) * 1000); // UTC 자정 + 9시간 = 한국 자정
+        const commitDateString = studyDateKorean.toISOString().split('T')[0];
 
         // 데이터베이스에 커밋 기록 저장 (하루 첫 번째 커밋만)
         const commitRecord = await this.databaseService.recordCommit({
