@@ -484,15 +484,18 @@ export class DatabaseService {
     studyDate: number; // 자정 타임스탬프
     studyEndTime: number;
   }>> {
-    const now = Math.floor(Date.now() / 1000); // 현재 Unix 타임스탬프
+    // KST 기준 현재 시간
+    const nowUTC = Date.now();
+    const nowKST = nowUTC + 9 * 60 * 60 * 1000; // UTC + 9시간
+    const nowKSTTimestamp = Math.floor(nowKST / 1000);
 
-    // 1. 오늘과 어제 날짜 계산 (시간대 고려)
-    const today = new Date();
-    const yesterday = new Date(today);
-    yesterday.setDate(today.getDate() - 1);
+    // 1. KST 기준 오늘과 어제 날짜 계산
+    const todayKST = new Date(nowKST);
+    const yesterdayKST = new Date(nowKST);
+    yesterdayKST.setDate(todayKST.getDate() - 1);
 
-    const todayDate = today.toISOString().split('T')[0]; // YYYY-MM-DD
-    const yesterdayDate = yesterday.toISOString().split('T')[0];
+    const todayDate = todayKST.toISOString().split('T')[0]; // YYYY-MM-DD
+    const yesterdayDate = yesterdayKST.toISOString().split('T')[0];
 
     // 2. 커밋 기록이 있는 스터디들 조회 (중복 제거)
     const commitRecords = await this.commitRecordRepository
@@ -519,14 +522,15 @@ export class DatabaseService {
       const study = record.study;
       const recordDate = record.date;
 
-      // 해당 날짜의 자정 타임스탬프 계산
-      const studyDate = Math.floor(new Date(recordDate + 'T00:00:00.000Z').getTime() / 1000);
+      // KST 기준 해당 날짜의 자정 타임스탬프 계산
+      const studyDateKST = new Date(recordDate + 'T00:00:00');
+      const studyDate = Math.floor(studyDateKST.getTime() / 1000);
 
-      // 스터디 종료 시간이 지났는지 확인
+      // 스터디 종료 시간이 지났는지 확인 (KST 기준)
       // study.study_end_time은 자정부터의 오프셋이므로 해당 날짜 자정에 더해서 비교
       const actualEndTime = studyDate + study.study_end_time;
 
-      if (now > actualEndTime) {
+      if (nowKSTTimestamp > actualEndTime) {
         studiesToClose.push({
           proxyAddress: study.proxy_address,
           studyName: study.study_name,

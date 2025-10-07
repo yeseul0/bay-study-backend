@@ -322,13 +322,13 @@ export class GitHubService {
 
       this.logger.log(`Webhook created successfully for ${owner}/${cleanRepo}. Hook ID: ${response.data.id}`);
     } catch (error) {
-      this.logger.error(`Failed to create webhook for ${repoUrl}`, error);
-
       if (error.response?.status === 422) {
-        // 웹훅이 이미 존재하는 경우
-        this.logger.warn(`Webhook already exists for ${repoUrl}`);
+        // 웹훅이 이미 존재하는 경우 - 깔끔한 로그
+        this.logger.log(`✅ Webhook already configured for ${owner}/${cleanRepo}`);
         return; // 이미 존재하면 에러로 처리하지 않음
       }
+
+      this.logger.error(`Failed to create webhook for ${repoUrl}`, error);
 
       if (error.response?.status === 403) {
         throw new Error('Insufficient permissions to create webhook. Admin access required.');
