@@ -535,30 +535,48 @@ export class DatabaseService {
 
       const studyDate = Math.floor(studyDateKST.getTime() / 1000);
 
-      // 자정 넘나드는 스터디인지 확인 (끝 시간이 24시간 이상이면 자정 넘나듦)
-      const isOvernight = study.study_end_time >= 86400;
-
+      // 끝나는 시간에 따라 어느 자정을 쓸지 결정
+      const endTimeNum = Number(study.study_end_time);
+      let studyMidnight: number;
       let actualEndTime: number;
 
-      if (isOvernight) {
-        // 자정 넘나드는 스터디: 다음날로 계산
-        const nextDayMidnight = studyDate + 86400; // 다음날 자정
-        const endTimeNextDay = (study.study_end_time % 86400); // 24시간 넘어간 부분
-        actualEndTime = nextDayMidnight + endTimeNextDay;
+      if (endTimeNum >= 86400) {
+        // 자정을 넘나드는 스터디 (예: 26시 = 새벽 2시)
+        // 전날 자정 사용
+        const yesterdayKST = new Date(nowKSTTimestamp * 1000);
+        yesterdayKST.setUTCDate(yesterdayKST.getUTCDate() - 1);
+        const yesterdayMidnightKST = new Date(yesterdayKST.getFullYear(), yesterdayKST.getMonth(), yesterdayKST.getDate());
+        studyMidnight = Math.floor(yesterdayMidnightKST.getTime() / 1000);
+        actualEndTime = studyMidnight + (endTimeNum % 86400); // 24시간 넘어간 부분만
+        this.logger.log(`Overnight study: using yesterday midnight ${studyMidnight}`);
       } else {
-        // 당일 완료 스터디: 기존 방식
-        actualEndTime = studyDate + study.study_end_time;
+        // 당일 완료 스터디 (예: 2시)
+        // 당일 자정 사용
+        const todayKST = new Date(nowKSTTimestamp * 1000);
+        const todayMidnightKST = new Date(todayKST.getFullYear(), todayKST.getMonth(), todayKST.getDate());
+        studyMidnight = Math.floor(todayMidnightKST.getTime() / 1000);
+        actualEndTime = studyMidnight + endTimeNum;
+        this.logger.log(`Same-day study: using today midnight ${studyMidnight}`);
       }
 
-      this.logger.log(`Checking study: ${study.study_name}, isOvernight: ${isOvernight}`);
-      this.logger.log(`actualEndTime timestamp: ${actualEndTime}, ISO: ${new Date(actualEndTime * 1000).toISOString()}`);
-      this.logger.log(`nowKSTTimestamp: ${nowKSTTimestamp}, ISO: ${new Date(nowKSTTimestamp * 1000).toISOString()}`);
+      this.logger.log(`Checking study: ${study.study_name}, endTime: ${endTimeNum >= 86400 ? 'overnight' : 'same-day'}`);
+      this.logger.log(`studyMidnight: ${studyMidnight}, study_end_time: ${study.study_end_time}, actualEndTime: ${actualEndTime}`);
+
+      // 안전한 ISO 변환
+      try {
+        const actualEndTimeISO = new Date(actualEndTime * 1000).toISOString();
+        const nowISO = new Date(nowKSTTimestamp * 1000).toISOString();
+        this.logger.log(`actualEndTime ISO: ${actualEndTimeISO}, now ISO: ${nowISO}`);
+      } catch (error) {
+        this.logger.error(`Invalid timestamp - actualEndTime: ${actualEndTime}, nowKSTTimestamp: ${nowKSTTimestamp}`);
+        continue; // 이 스터디는 건너뛰기
+      }
 
       if (nowKSTTimestamp > actualEndTime) {
         studiesToClose.push({
           proxyAddress: study.proxy_address,
           studyName: study.study_name,
-          studyDate,
+          studyDate: studyMidnight, // 올바른 자정 timestamp 사용
           studyEndTime: study.study_end_time
         });
       }
