@@ -534,47 +534,24 @@ export class DatabaseService {
 
       const studyDate = Math.floor(studyDateKST.getTime() / 1000);
 
-      // 끝나는 시간에 따라 어느 자정을 쓸지 결정
+      // calculateStudyDate()와 동일한 로직으로 올바른 자정 계산
+      const studyMidnight = this.calculateStudyDateForScheduler(
+        nowUTCTimestamp,
+        study.study_start_time,
+        study.study_end_time
+      );
+
       const endTimeNum = Number(study.study_end_time);
-      let studyMidnight: number;
       let actualEndTime: number;
 
       if (endTimeNum >= 86400) {
-        // 자정을 넘나드는 스터디 (예: 26시 = 새벽 2시)
-        // 전날 한국 자정 사용 (UTC 기준 전전날 15:00)
-        const todayKST = new Date(nowUTCTimestamp * 1000);
-        const yesterdayKST = new Date(todayKST);
-        yesterdayKST.setUTCDate(yesterdayKST.getUTCDate() - 1);
-
-        // UTC 기준 전날 15:00 = 한국 당일 자정
-        const yesterdayMidnightUTC = new Date(Date.UTC(
-          yesterdayKST.getUTCFullYear(),
-          yesterdayKST.getUTCMonth(),
-          yesterdayKST.getUTCDate(),
-          15, 0, 0, 0
-        ));
-        yesterdayMidnightUTC.setUTCDate(yesterdayMidnightUTC.getUTCDate() - 1);
-
-        studyMidnight = Math.floor(yesterdayMidnightUTC.getTime() / 1000);
+        // 자정을 넘나드는 스터디
         actualEndTime = studyMidnight + (endTimeNum % 86400); // 24시간 넘어간 부분만
-        this.logger.log(`Overnight study: using yesterday Korean midnight (UTC) ${studyMidnight}`);
+        this.logger.log(`Overnight study: using Korean midnight (UTC) ${studyMidnight}`);
       } else {
-        // 당일 완료 스터디 (예: 2시)
-        // 당일 한국 자정 사용 (UTC 기준 전날 15:00)
-        const todayKST = new Date(nowUTCTimestamp * 1000);
-
-        // UTC 기준 당일 15:00 = 한국 다음날 자정
-        const todayMidnightUTC = new Date(Date.UTC(
-          todayKST.getUTCFullYear(),
-          todayKST.getUTCMonth(),
-          todayKST.getUTCDate(),
-          15, 0, 0, 0
-        ));
-        todayMidnightUTC.setUTCDate(todayMidnightUTC.getUTCDate() - 1);
-
-        studyMidnight = Math.floor(todayMidnightUTC.getTime() / 1000);
+        // 당일 완료 스터디
         actualEndTime = studyMidnight + endTimeNum;
-        this.logger.log(`Same-day study: using today Korean midnight (UTC) ${studyMidnight}`);
+        this.logger.log(`Same-day study: using Korean midnight (UTC) ${studyMidnight}`);
       }
 
       this.logger.log(`Checking study: ${study.study_name}, endTime: ${endTimeNum >= 86400 ? 'overnight' : 'same-day'}`);
@@ -601,6 +578,60 @@ export class DatabaseService {
     }
 
     return studiesToClose;
+  }
+
+  /**
+   * calculateStudyDate()와 동일한 로직으로 스케줄러용 자정 계산
+   * @param currentTimestamp 현재 시간 (UTC Unix timestamp)
+   * @param studyStartTime 스터디 시작 시간 (seconds from midnight in KST)
+   * @param studyEndTime 스터디 종료 시간 (seconds from midnight in KST)
+   * @returns UTC timestamp representing Korean midnight
+   */
+  private calculateStudyDateForScheduler(
+    currentTimestamp: number,
+    studyStartTime: number,
+    studyEndTime: number
+  ): number {
+    // 현재 시간을 KST로 변환해서 날짜 확인
+    const currentDateKST = new Date((currentTimestamp + 9 * 3600) * 1000);
+
+    // 스터디가 자정을 넘나드는지 확인: 끝 offset이 24시간(86400초)을 넘으면 자정 넘나듦
+    const isOvernight = Number(studyEndTime) >= 86400;
+
+    let targetDate: Date;
+
+    if (isOvernight) {
+      // 자정을 넘나드는 스터디 (예: 22시-새벽2시 = 22시-26시)
+      const currentHourKST = currentDateKST.getUTCHours();
+      const endHour = Math.floor((Number(studyEndTime) % 86400) / 3600); // 새벽 시간
+
+      if (currentHourKST <= endHour) {
+        // 현재가 새벽이면 전날 자정 기준
+        targetDate = new Date(currentDateKST);
+        targetDate.setUTCDate(targetDate.getUTCDate() - 1);
+      } else {
+        // 현재가 저녁이면 당일 자정 기준
+        targetDate = new Date(currentDateKST);
+      }
+    } else {
+      // 자정을 넘나들지 않는 스터디 (예: 2시-3시)
+      targetDate = new Date(currentDateKST);
+    }
+
+    // 한국 날짜의 자정을 UTC로 변환
+    // 한국 자정 = UTC 전날 15:00 (오후 3시)
+    // 예: 한국 10/8 자정 = UTC 10/7 오후 3시
+    const year = targetDate.getUTCFullYear();
+    const month = targetDate.getUTCMonth();
+    const date = targetDate.getUTCDate();
+
+    // UTC 기준으로 해당 날짜 15:00 설정 (한국 다음날 자정)
+    const koreanMidnightUTC = new Date(Date.UTC(year, month, date, 15, 0, 0, 0));
+
+    // 하루 빼기 (한국 자정은 UTC 기준 전날 15시)
+    koreanMidnightUTC.setUTCDate(koreanMidnightUTC.getUTCDate() - 1);
+
+    return Math.floor(koreanMidnightUTC.getTime() / 1000);
   }
 
   /**
