@@ -110,6 +110,22 @@ export class BlockchainService {
       // 특정 스터디 컨트랙트에 연결
       const studyContract = new ethers.Contract(proxyAddress, StudyGroupABI, this.wallet);
 
+      // 현재 블록 시간 확인
+      const latestBlock = await this.provider.getBlock('latest');
+      if (!latestBlock) {
+        throw new Error('Failed to get latest block');
+      }
+      const blockTimestamp = latestBlock.timestamp;
+      this.logger.log(`Current block timestamp: ${blockTimestamp} (${new Date(blockTimestamp * 1000).toISOString()})`);
+      this.logger.log(`Study timestamp: ${studyDate} (${new Date(studyDate * 1000).toISOString()})`);
+
+      // 스터디 종료 시간 확인
+      const studyEndTime = await studyContract.studyEndTime();
+      const requiredEndTime = studyDate + Number(studyEndTime);
+      this.logger.log(`Study end time offset: ${studyEndTime}`);
+      this.logger.log(`Required end time: ${requiredEndTime} (${new Date(requiredEndTime * 1000).toISOString()})`);
+      this.logger.log(`Block time > Required time? ${blockTimestamp} > ${requiredEndTime} = ${blockTimestamp > requiredEndTime}`);
+
       // 컨트랙트의 closeStudy 함수 호출
       const tx = await studyContract.closeStudy(studyDate);
 

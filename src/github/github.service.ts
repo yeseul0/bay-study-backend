@@ -224,8 +224,7 @@ export class GitHubService {
     }
 
     // KST 기준 해당 날짜의 자정 타임스탬프 계산
-    const midnightKST = new Date(studyBaseDate);
-    midnightKST.setUTCHours(0, 0, 0, 0);
+    const midnightKST = new Date(studyBaseDate.getFullYear(), studyBaseDate.getMonth(), studyBaseDate.getDate());
 
     // KST 자정을 그대로 타임스탬프로 변환 (블록체인이 KST 기준이므로)
     const midnightTimestamp = Math.floor(midnightKST.getTime() / 1000);
