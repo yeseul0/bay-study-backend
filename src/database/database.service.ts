@@ -484,12 +484,11 @@ export class DatabaseService {
     studyDate: number; // 자정 타임스탬프
     studyEndTime: number;
   }>> {
-    // KST 기준 현재 시간
-    const nowUTC = Date.now();
-    const nowKST = nowUTC + 9 * 60 * 60 * 1000; // UTC + 9시간
-    const nowKSTTimestamp = Math.floor(nowKST / 1000);
+    // 현재 UTC 시간 (올바른 현재 시간)
+    const nowUTCTimestamp = Math.floor(Date.now() / 1000);
 
     // 1. KST 기준 오늘과 어제 날짜 계산
+    const nowKST = nowUTCTimestamp * 1000 + 9 * 60 * 60 * 1000; // KST 변환용
     const todayKST = new Date(nowKST);
     const yesterdayKST = new Date(nowKST);
     yesterdayKST.setDate(todayKST.getDate() - 1);
@@ -543,7 +542,7 @@ export class DatabaseService {
       if (endTimeNum >= 86400) {
         // 자정을 넘나드는 스터디 (예: 26시 = 새벽 2시)
         // 전날 한국 자정 사용 (UTC 기준 전전날 15:00)
-        const todayKST = new Date(nowKSTTimestamp * 1000);
+        const todayKST = new Date(nowUTCTimestamp * 1000);
         const yesterdayKST = new Date(todayKST);
         yesterdayKST.setUTCDate(yesterdayKST.getUTCDate() - 1);
 
@@ -562,7 +561,7 @@ export class DatabaseService {
       } else {
         // 당일 완료 스터디 (예: 2시)
         // 당일 한국 자정 사용 (UTC 기준 전날 15:00)
-        const todayKST = new Date(nowKSTTimestamp * 1000);
+        const todayKST = new Date(nowUTCTimestamp * 1000);
 
         // UTC 기준 당일 15:00 = 한국 다음날 자정
         const todayMidnightUTC = new Date(Date.UTC(
@@ -584,14 +583,14 @@ export class DatabaseService {
       // 안전한 ISO 변환
       try {
         const actualEndTimeISO = new Date(actualEndTime * 1000).toISOString();
-        const nowISO = new Date(nowKSTTimestamp * 1000).toISOString();
+        const nowISO = new Date(nowUTCTimestamp * 1000).toISOString();
         this.logger.log(`actualEndTime ISO: ${actualEndTimeISO}, now ISO: ${nowISO}`);
       } catch (error) {
-        this.logger.error(`Invalid timestamp - actualEndTime: ${actualEndTime}, nowKSTTimestamp: ${nowKSTTimestamp}`);
+        this.logger.error(`Invalid timestamp - actualEndTime: ${actualEndTime}, nowUTCTimestamp: ${nowUTCTimestamp}`);
         continue; // 이 스터디는 건너뛰기
       }
 
-      if (nowKSTTimestamp > actualEndTime) {
+      if (nowUTCTimestamp > actualEndTime) {
         studiesToClose.push({
           proxyAddress: study.proxy_address,
           studyName: study.study_name,
