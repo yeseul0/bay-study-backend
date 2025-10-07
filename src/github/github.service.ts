@@ -116,8 +116,18 @@ export class GitHubService {
 
           // 해당 스터디에서 오늘 첫 번째 커밋인 경우 startTodayStudy 먼저 호출
           if (commitRecord.isFirstStudyCommitToday) {
-            await this.blockchainService.startTodayStudy(study.proxy_address, studyDate);
-            this.logger.log(`Started today's study for ${study.study_name} (first commit of the day, study date: ${new Date(studyDate * 1000).toISOString()})`);
+            try {
+              await this.blockchainService.startTodayStudy(study.proxy_address, studyDate);
+              this.logger.log(`Started today's study for ${study.study_name} (first commit of the day, study date: ${new Date(studyDate * 1000).toISOString()})`);
+            } catch (error) {
+              // "Study for this day already exists" 에러는 무시하고 계속 진행
+              if (error.message && error.message.includes("Study for this day already exists")) {
+                this.logger.log(`Study for ${study.study_name} already exists for this day - proceeding with trackCommit`);
+              } else {
+                this.logger.error(`Failed to start today's study for ${study.study_name}:`, error);
+                throw error; // 다른 에러는 재발생
+              }
+            }
           }
 
           // 개별 커밋 트래킹 (같은 studyDate 사용)
