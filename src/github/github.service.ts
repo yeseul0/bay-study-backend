@@ -262,15 +262,16 @@ export class GitHubService {
    * GitHub 레포지토리에 웹훅 추가
    */
   async createRepositoryWebhook(repoUrl: string, accessToken: string): Promise<void> {
-    try {
-      // GitHub URL에서 owner/repo 추출
-      const urlMatch = repoUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/);
-      if (!urlMatch) {
-        throw new Error('Invalid GitHub repository URL');
-      }
+    // GitHub URL에서 owner/repo 추출 (try 블록 밖으로 이동)
+    const urlMatch = repoUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/);
+    if (!urlMatch) {
+      throw new Error('Invalid GitHub repository URL');
+    }
 
-      const [, owner, repo] = urlMatch;
-      const cleanRepo = repo.replace(/\.git$/, ''); // .git 확장자 제거
+    const [, owner, repo] = urlMatch;
+    const cleanRepo = repo.replace(/\.git$/, ''); // .git 확장자 제거
+
+    try {
 
       this.logger.log(`Creating webhook for ${owner}/${cleanRepo}`);
 
