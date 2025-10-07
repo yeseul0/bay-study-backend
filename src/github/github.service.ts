@@ -130,8 +130,9 @@ export class GitHubService {
             }
           }
 
-          // 개별 커밋 트래킹 (같은 studyDate 사용)
-          await this.blockchainService.trackCommit(study.proxy_address, participation.walletAddress!, commitTimestamp, studyDate);
+          // 개별 커밋 트래킹 (KST 기준 시간으로 변환)
+          const commitTimestampKST = commitTimestamp + 9 * 3600; // UTC → KST 변환
+          await this.blockchainService.trackCommit(study.proxy_address, participation.walletAddress!, commitTimestampKST, studyDate);
           this.logger.log(`Successfully tracked FIRST commit for ${participation.walletAddress} in study ${study.study_name} (${commitData.authorEmail})`);
         } else {
           this.logger.log(`Commit already recorded for today in study ${study.study_name} - skipping blockchain call`);
