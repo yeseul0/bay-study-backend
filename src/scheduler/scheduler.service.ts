@@ -15,7 +15,7 @@ export class SchedulerService {
   /**
    * 매 시간마다 종료해야 할 스터디들 체크 및 종료 처리
    */
-  @Cron('*/5 * * * *', { timeZone: 'Asia/Seoul' }) // KST 기준 매 5분마다 실행
+  @Cron('*/15 * * * *', { timeZone: 'Asia/Seoul' }) // KST 기준 매 15분마다 실행
   async handleStudyClosures() {
     try {
       this.logger.log('Checking for studies to close...');
@@ -100,6 +100,19 @@ export class SchedulerService {
         success: false,
         message: `Failed to trigger study closures: ${error.message}`
       };
+    }
+  }
+
+  /**
+   * 13분마다 셀프핑 (서버 잠들지 않도록)
+   */
+  @Cron('*/13 * * * *', { timeZone: 'Asia/Seoul' }) // KST 기준 매 13분마다 실행
+  async selfPing() {
+    try {
+      const response = await fetch(process.env.GITHUB_WEBHOOK_URL?.replace('/github/webhook', '') || 'https://bay-study-backend.onrender.com');
+      this.logger.log(`Self-ping successful: ${response.status} ${response.statusText}`);
+    } catch (error) {
+      this.logger.warn(`Self-ping failed: ${error.message}`);
     }
   }
 }
