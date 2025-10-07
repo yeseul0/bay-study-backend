@@ -185,46 +185,53 @@ export class GitHubService {
 
   /**
    * 스터디 날짜 계산 (스터디 시작 시간 기준)
-   * 예: 11시-새벽1시 스터디에서 12시30분 커밋 → 11시 기준 날짜의 자정 타임스탬프
+   * 예: 11시-새벽1시 스터디에서 12시30분 커밋 → 11시 기준 날짜의 KST 자정 타임스탬프
    * @param commitTimestamp 커밋 시간 (Unix timestamp)
-   * @param studyStartTime 스터디 시작 시간 (Unix timestamp)
-   * @param studyEndTime 스터디 종료 시간 (Unix timestamp)
+   * @param studyStartTime 스터디 시작 시간 (seconds from midnight in KST)
+   * @param studyEndTime 스터디 종료 시간 (seconds from midnight in KST)
    */
   private calculateStudyDate(
     commitTimestamp: number,
     studyStartTime: number,
     studyEndTime: number
   ): number {
-    const commitDate = new Date(commitTimestamp * 1000);
-    const startDate = new Date(studyStartTime * 1000);
-    const endDate = new Date(studyEndTime * 1000);
+    // KST로 변환 (UTC + 9시간)
+    const commitDateKST = new Date((commitTimestamp + 9 * 3600) * 1000);
+
+    // KST 기준으로 날짜 계산
+    let studyBaseDate: Date;
 
     // 스터디가 자정을 넘나드는지 확인 (예: 23:00-01:00)
-    const isOvernight = endDate.getTime() < startDate.getTime() ||
-                       (endDate.getDate() !== startDate.getDate());
-
-    let studyBaseDate: Date;
+    const isOvernight = Number(studyEndTime) < Number(studyStartTime);
 
     if (isOvernight) {
       // 자정을 넘나드는 스터디의 경우
-      // 커밋 시간이 스터디 종료 시간 이전이면서 자정 이후라면, 스터디 시작일 기준
-      if (commitDate.getHours() < 12) { // 오전 시간대 (자정 이후)
-        // 스터디 시작일을 기준으로 함 (하루 전)
-        studyBaseDate = new Date(startDate);
+      const commitHourKST = commitDateKST.getUTCHours();
+      const commitMinuteKST = commitDateKST.getUTCMinutes();
+      const commitSecondsFromMidnight = commitHourKST * 3600 + commitMinuteKST * 60 + commitDateKST.getUTCSeconds();
+
+      // 커밋이 스터디 종료 시간 이전(자정 이후 새벽)이면 스터디 시작일 기준
+      if (commitSecondsFromMidnight <= Number(studyEndTime)) {
+        // 하루 전 날짜를 기준으로 함
+        studyBaseDate = new Date(commitDateKST);
+        studyBaseDate.setUTCDate(studyBaseDate.getUTCDate() - 1);
       } else {
-        // 오후/저녁 시간대면 해당 날짜 기준
-        studyBaseDate = new Date(commitDate);
+        // 스터디 시작 시간 이후면 해당 날짜 기준
+        studyBaseDate = new Date(commitDateKST);
       }
     } else {
       // 자정을 넘나들지 않는 스터디의 경우 커밋 날짜 기준
-      studyBaseDate = new Date(commitDate);
+      studyBaseDate = new Date(commitDateKST);
     }
 
-    // 해당 날짜의 자정 타임스탬프 반환
-    const midnight = new Date(studyBaseDate);
-    midnight.setHours(0, 0, 0, 0);
+    // KST 기준 해당 날짜의 자정 타임스탬프 계산
+    const midnightKST = new Date(studyBaseDate);
+    midnightKST.setUTCHours(0, 0, 0, 0);
 
-    return Math.floor(midnight.getTime() / 1000);
+    // KST 자정을 UTC 타임스탬프로 변환 (KST 자정 = UTC 15:00 전날)
+    const midnightUTC = Math.floor(midnightKST.getTime() / 1000) - 9 * 3600;
+
+    return midnightUTC;
   }
 
   /**
