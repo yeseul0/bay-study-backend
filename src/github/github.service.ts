@@ -130,9 +130,8 @@ export class GitHubService {
             }
           }
 
-          // 개별 커밋 트래킹 (KST 기준 시간으로 변환)
-          const commitTimestampKST = commitTimestamp + 9 * 3600; // UTC → KST 변환
-          await this.blockchainService.trackCommit(study.proxy_address, participation.walletAddress!, commitTimestampKST, studyDate);
+          // 개별 커밋 트래킹 (UTC 시간 그대로 사용)
+          await this.blockchainService.trackCommit(study.proxy_address, participation.walletAddress!, commitTimestamp, studyDate);
           this.logger.log(`Successfully tracked FIRST commit for ${participation.walletAddress} in study ${study.study_name} (${commitData.authorEmail})`);
         } else {
           this.logger.log(`Commit already recorded for today in study ${study.study_name} - skipping blockchain call`);
@@ -156,13 +155,17 @@ export class GitHubService {
     studyEndTime: number
   ): boolean {
     // 커밋 시간을 KST로 변환해서 날짜 찾기
-    const commitDate = new Date(commitTimestamp * 1000);
-    const kstOffset = 9 * 60 * 60 * 1000; // 9시간을 밀리초로
-    const commitKST = new Date(commitDate.getTime() + kstOffset);
+    const commitKST = new Date((commitTimestamp + 9 * 3600) * 1000);
 
-    // 커밋 날짜의 자정 (KST 기준) → UTC 자정으로 변환
-    const commitDateMidnight = new Date(commitKST.getFullYear(), commitKST.getMonth(), commitKST.getDate());
-    const midnightTimestamp = Math.floor((commitDateMidnight.getTime() - kstOffset) / 1000); // KST 자정을 UTC로
+    // 한국 자정을 UTC 기준으로 계산 (한국 자정 = UTC 전날 15:00)
+    const koreanMidnightUTC = new Date(Date.UTC(
+      commitKST.getUTCFullYear(),
+      commitKST.getUTCMonth(),
+      commitKST.getUTCDate(),
+      15, 0, 0, 0
+    ));
+    koreanMidnightUTC.setUTCDate(koreanMidnightUTC.getUTCDate() - 1);
+    const midnightTimestamp = Math.floor(koreanMidnightUTC.getTime() / 1000);
 
     // 스터디 시작/종료 시간 계산
     const actualStartTime = midnightTimestamp + Number(studyStartTime);
@@ -185,51 +188,58 @@ export class GitHubService {
   }
 
   /**
-   * 스터디 날짜 계산 (스터디 시작 시간 기준)
-   * 예: 11시-새벽1시 스터디에서 12시30분 커밋 → 11시 기준 날짜의 KST 자정 타임스탬프
-   * @param commitTimestamp 커밋 시간 (Unix timestamp)
+   * 스터디 날짜 계산 (UTC 기준으로 변경)
+   * 예: 11시-새벽1시 스터디에서 12시30분 커밋 → UTC 기준 한국 자정 타임스탬프
+   * @param commitTimestamp 커밋 시간 (UTC Unix timestamp)
    * @param studyStartTime 스터디 시작 시간 (seconds from midnight in KST)
    * @param studyEndTime 스터디 종료 시간 (seconds from midnight in KST)
+   * @returns UTC timestamp representing Korean midnight (Korean midnight = UTC 15:00 previous day)
    */
   private calculateStudyDate(
     commitTimestamp: number,
     studyStartTime: number,
     studyEndTime: number
   ): number {
-    // KST로 변환 (UTC + 9시간)
+    // 커밋 시간을 KST로 변환해서 날짜 확인
     const commitDateKST = new Date((commitTimestamp + 9 * 3600) * 1000);
-
-    // KST 기준으로 날짜 계산
-    let studyBaseDate: Date;
 
     // 스터디가 자정을 넘나드는지 확인: 끝 offset이 24시간(86400초)을 넘으면 자정 넘나듦
     const isOvernight = Number(studyEndTime) >= 86400;
 
+    let targetDate: Date;
+
     if (isOvernight) {
-      // 자정을 넘나드는 스터디: 커밋이 새벽이면 전날 기준, 저녁이면 당일 기준
+      // 자정을 넘나드는 스터디 (예: 22시-새벽2시 = 22시-26시)
       const commitHourKST = commitDateKST.getUTCHours();
-      const endHour = Math.floor((Number(studyEndTime) % 86400) / 3600); // 24시간 넘어간 부분을 새벽 시간으로 변환
+      const endHour = Math.floor((Number(studyEndTime) % 86400) / 3600); // 새벽 시간
 
       if (commitHourKST <= endHour) {
-        // 커밋이 스터디 종료 시간 이전의 새벽이면 전날 자정 기준
-        studyBaseDate = new Date(commitDateKST);
-        studyBaseDate.setUTCDate(studyBaseDate.getUTCDate() - 1);
+        // 커밋이 새벽이면 전날 자정 기준
+        targetDate = new Date(commitDateKST);
+        targetDate.setUTCDate(targetDate.getUTCDate() - 1);
       } else {
-        // 커밋이 스터디 시작 시간 이후면 당일 자정 기준
-        studyBaseDate = new Date(commitDateKST);
+        // 커밋이 저녁이면 당일 자정 기준
+        targetDate = new Date(commitDateKST);
       }
     } else {
-      // 자정을 넘나들지 않는 스터디의 경우 커밋 날짜 기준
-      studyBaseDate = new Date(commitDateKST);
+      // 자정을 넘나들지 않는 스터디 (예: 2시-3시)
+      targetDate = new Date(commitDateKST);
     }
 
-    // KST 기준 해당 날짜의 자정 타임스탬프 계산
-    const midnightKST = new Date(studyBaseDate.getFullYear(), studyBaseDate.getMonth(), studyBaseDate.getDate());
+    // 한국 날짜의 자정을 UTC로 변환
+    // 한국 자정 = UTC 전날 15:00 (오후 3시)
+    // 예: 한국 10/8 자정 = UTC 10/7 오후 3시
+    const year = targetDate.getUTCFullYear();
+    const month = targetDate.getUTCMonth();
+    const date = targetDate.getUTCDate();
 
-    // KST 자정을 그대로 타임스탬프로 변환 (블록체인이 KST 기준이므로)
-    const midnightTimestamp = Math.floor(midnightKST.getTime() / 1000);
+    // UTC 기준으로 해당 날짜 15:00 설정 (한국 다음날 자정)
+    const koreanMidnightUTC = new Date(Date.UTC(year, month, date, 15, 0, 0, 0));
 
-    return midnightTimestamp;
+    // 하루 빼기 (한국 자정은 UTC 기준 전날 15시)
+    koreanMidnightUTC.setUTCDate(koreanMidnightUTC.getUTCDate() - 1);
+
+    return Math.floor(koreanMidnightUTC.getTime() / 1000);
   }
 
   /**

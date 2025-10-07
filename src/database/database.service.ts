@@ -542,21 +542,40 @@ export class DatabaseService {
 
       if (endTimeNum >= 86400) {
         // 자정을 넘나드는 스터디 (예: 26시 = 새벽 2시)
-        // 전날 자정 사용
-        const yesterdayKST = new Date(nowKSTTimestamp * 1000);
+        // 전날 한국 자정 사용 (UTC 기준 전전날 15:00)
+        const todayKST = new Date(nowKSTTimestamp * 1000);
+        const yesterdayKST = new Date(todayKST);
         yesterdayKST.setUTCDate(yesterdayKST.getUTCDate() - 1);
-        const yesterdayMidnightKST = new Date(yesterdayKST.getFullYear(), yesterdayKST.getMonth(), yesterdayKST.getDate());
-        studyMidnight = Math.floor(yesterdayMidnightKST.getTime() / 1000);
+
+        // UTC 기준 전날 15:00 = 한국 당일 자정
+        const yesterdayMidnightUTC = new Date(Date.UTC(
+          yesterdayKST.getUTCFullYear(),
+          yesterdayKST.getUTCMonth(),
+          yesterdayKST.getUTCDate(),
+          15, 0, 0, 0
+        ));
+        yesterdayMidnightUTC.setUTCDate(yesterdayMidnightUTC.getUTCDate() - 1);
+
+        studyMidnight = Math.floor(yesterdayMidnightUTC.getTime() / 1000);
         actualEndTime = studyMidnight + (endTimeNum % 86400); // 24시간 넘어간 부분만
-        this.logger.log(`Overnight study: using yesterday midnight ${studyMidnight}`);
+        this.logger.log(`Overnight study: using yesterday Korean midnight (UTC) ${studyMidnight}`);
       } else {
         // 당일 완료 스터디 (예: 2시)
-        // 당일 자정 사용
+        // 당일 한국 자정 사용 (UTC 기준 전날 15:00)
         const todayKST = new Date(nowKSTTimestamp * 1000);
-        const todayMidnightKST = new Date(todayKST.getFullYear(), todayKST.getMonth(), todayKST.getDate());
-        studyMidnight = Math.floor(todayMidnightKST.getTime() / 1000);
+
+        // UTC 기준 당일 15:00 = 한국 다음날 자정
+        const todayMidnightUTC = new Date(Date.UTC(
+          todayKST.getUTCFullYear(),
+          todayKST.getUTCMonth(),
+          todayKST.getUTCDate(),
+          15, 0, 0, 0
+        ));
+        todayMidnightUTC.setUTCDate(todayMidnightUTC.getUTCDate() - 1);
+
+        studyMidnight = Math.floor(todayMidnightUTC.getTime() / 1000);
         actualEndTime = studyMidnight + endTimeNum;
-        this.logger.log(`Same-day study: using today midnight ${studyMidnight}`);
+        this.logger.log(`Same-day study: using today Korean midnight (UTC) ${studyMidnight}`);
       }
 
       this.logger.log(`Checking study: ${study.study_name}, endTime: ${endTimeNum >= 86400 ? 'overnight' : 'same-day'}`);
