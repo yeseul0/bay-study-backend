@@ -210,9 +210,9 @@ export class GitHubService {
       const commitMinuteKST = commitDateKST.getUTCMinutes();
       const commitSecondsFromMidnight = commitHourKST * 3600 + commitMinuteKST * 60 + commitDateKST.getUTCSeconds();
 
-      // 커밋이 스터디 종료 시간 이전(자정 이후 새벽)이면 스터디 시작일 기준
+      // 커밋이 스터디 종료 시간 이전(자정 이후 새벽)이면 전날 기준
       if (commitSecondsFromMidnight <= Number(studyEndTime)) {
-        // 하루 전 날짜를 기준으로 함
+        // 전날 자정을 기준으로 함 (스터디 시작일)
         studyBaseDate = new Date(commitDateKST);
         studyBaseDate.setUTCDate(studyBaseDate.getUTCDate() - 1);
       } else {
