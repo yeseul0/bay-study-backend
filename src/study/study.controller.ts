@@ -409,25 +409,6 @@ export class StudyController {
     }
   }
 
-  @Post('emergency-withdraw')
-  @HttpCode(HttpStatus.OK)
-  async emergencyWithdraw(@Body() body: { githubEmail: string; proxyAddress: string }): Promise<{
-    success: boolean;
-    message: string;
-  }> {
-    try {
-      await this.databaseService.withdrawFromStudy(body.githubEmail, body.proxyAddress);
-      return {
-        success: true,
-        message: `Successfully withdrew ${body.githubEmail} from study ${body.proxyAddress}`
-      };
-    } catch (error) {
-      return {
-        success: false,
-        message: `Failed to withdraw: ${error.message}`
-      };
-    }
-  }
 
   @Post('sync-blockchain')
   @HttpCode(HttpStatus.OK)

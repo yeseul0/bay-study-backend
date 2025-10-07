@@ -227,10 +227,10 @@ export class GitHubService {
     const midnightKST = new Date(studyBaseDate);
     midnightKST.setUTCHours(0, 0, 0, 0);
 
-    // KST 자정을 UTC 타임스탬프로 변환 (KST 자정 = UTC 15:00 전날)
-    const midnightUTC = Math.floor(midnightKST.getTime() / 1000) - 9 * 3600;
+    // KST 자정을 그대로 타임스탬프로 변환 (블록체인이 KST 기준이므로)
+    const midnightTimestamp = Math.floor(midnightKST.getTime() / 1000);
 
-    return midnightUTC;
+    return midnightTimestamp;
   }
 
   /**
