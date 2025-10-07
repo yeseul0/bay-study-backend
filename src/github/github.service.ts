@@ -93,11 +93,9 @@ export class GitHubService {
         this.logger.log(`DEBUG - Study end offset: ${study.study_end_time}s`);
         this.logger.log(`DEBUG - Commit time: ${new Date(commitTimestamp * 1000).toISOString()}`);
 
-        const studyDate = this.calculateStudyDate(commitTimestamp, study.study_start_time, study.study_end_time);
-        this.logger.log(`DEBUG - Study date (midnight): ${studyDate} = ${new Date(studyDate * 1000).toISOString()}`);
-
         // 스터디 날짜 계산 (블록체인과 동일한 기준)
         const studyDate = this.calculateStudyDate(commitTimestamp, study.study_start_time, study.study_end_time);
+        this.logger.log(`DEBUG - Study date (midnight): ${studyDate} = ${new Date(studyDate * 1000).toISOString()}`);
 
         // 스터디 날짜에 해당하는 한국 날짜로 DB 기록
         const studyDateKorean = new Date((studyDate + 9 * 3600) * 1000); // UTC 자정 + 9시간 = 한국 자정
@@ -115,9 +113,6 @@ export class GitHubService {
         });
 
         if (commitRecord.isFirstCommit) {
-          // 스터디 날짜 계산: 스터디 시작 시간을 기준으로 날짜 결정
-          const studyDate = this.calculateStudyDate(commitTimestamp, study.study_start_time, study.study_end_time);
-
           // 해당 스터디에서 오늘 첫 번째 커밋인 경우 startTodayStudy 먼저 호출
           if (commitRecord.isFirstStudyCommitToday) {
             try {
