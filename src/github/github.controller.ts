@@ -204,29 +204,16 @@ export class GitHubController {
       this.logger.log(`🏓 Ping event received! Zen: "${body.zen}"`);
     }
 
-    // 전체 페이로드 (축약버전)
-    this.logger.log('📋 Full payload keys:', Object.keys(body));
 
-    // 🔍 레포지토리 URL로 등록된 스터디들 확인 (테스트용)
+    // 레포지토리 URL로 등록된 스터디들 확인
     if (body.repository?.html_url) {
-      this.logger.log(`🔍 Checking studies for repository: ${body.repository.html_url}`);
 
       // 비동기로 스터디 찾기
       setImmediate(async () => {
         try {
           const studies = await this.databaseService.findStudiesByRepository(body.repository.html_url);
-          this.logger.log(`📚 Found ${studies.length} studies for this repository:`);
-
           if (studies.length > 0) {
-            studies.forEach((study, index) => {
-              this.logger.log(`  📖 Study ${index + 1}:`);
-              this.logger.log(`    Name: ${study.study_name}`);
-              this.logger.log(`    Proxy: ${study.proxy_address}`);
-              this.logger.log(`    Start: ${new Date(study.study_start_time * 1000).toISOString()}`);
-              this.logger.log(`    End: ${new Date(study.study_end_time * 1000).toISOString()}`);
-            });
-          } else {
-            this.logger.log('    ❌ No studies found for this repository');
+            this.logger.log(`Found ${studies.length} studies for repository`);
           }
         } catch (error) {
           this.logger.error('Failed to find studies for repository', error);

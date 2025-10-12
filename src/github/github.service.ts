@@ -154,37 +154,15 @@ export class GitHubService {
     studyStartTime: number,
     studyEndTime: number
   ): boolean {
-    // 커밋 시간을 KST로 변환해서 날짜 찾기
-    const commitKST = new Date((commitTimestamp + 9 * 3600) * 1000);
+    // 1. 시작 날짜(자정) 계산 - calculateStudyDate와 동일한 로직 사용
+    const midnightTimestamp = this.calculateStudyDate(commitTimestamp, studyStartTime, studyEndTime);
 
-    // 한국 자정을 UTC 기준으로 계산 (한국 자정 = UTC 전날 15:00)
-    const koreanMidnightUTC = new Date(Date.UTC(
-      commitKST.getUTCFullYear(),
-      commitKST.getUTCMonth(),
-      commitKST.getUTCDate(),
-      15, 0, 0, 0
-    ));
-    koreanMidnightUTC.setUTCDate(koreanMidnightUTC.getUTCDate() - 1);
-    const midnightTimestamp = Math.floor(koreanMidnightUTC.getTime() / 1000);
-
-    // 스터디 시작/종료 시간 계산
+    // 2. 시작/종료 시간 계산
     const actualStartTime = midnightTimestamp + Number(studyStartTime);
     const actualEndTime = midnightTimestamp + Number(studyEndTime);
 
-    // 새벽을 넘나드는 스터디인지 확인
-    // 조건: studyEndTime > 24시간(86400초) 또는 studyEndTime < studyStartTime
-    if (studyEndTime > 24 * 60 * 60 || studyEndTime < studyStartTime) {
-      // 새벽을 넘나드는 경우
-      // studyEndTime이 24시간을 넘으면 (예: 26:00 = 93600초) 실제로는 다음날 새벽 시간
-      const realEndTime = studyEndTime > 24 * 60 * 60 ? studyEndTime - 24 * 60 * 60 : studyEndTime;
-      const nextDayEndTime = midnightTimestamp + 24 * 60 * 60 + realEndTime;
-
-      // 시작시간 이후이거나 다음날 종료시간 이전이면 스터디 시간 내
-      return (commitTimestamp >= actualStartTime) || (commitTimestamp <= nextDayEndTime);
-    } else {
-      // 같은 날 내에서 끝나는 경우
-      return commitTimestamp >= actualStartTime && commitTimestamp <= actualEndTime;
-    }
+    // 3. 간단한 범위 체크
+    return commitTimestamp >= actualStartTime && commitTimestamp <= actualEndTime;
   }
 
   /**
@@ -198,7 +176,7 @@ export class GitHubService {
   private calculateStudyDate(
     commitTimestamp: number,
     studyStartTime: number,
-    studyEndTime: number
+    studyEndTime: number,
   ): number {
     // 커밋 시간을 KST로 변환해서 날짜 확인
     const commitDateKST = new Date((commitTimestamp + 9 * 3600) * 1000);
@@ -318,23 +296,6 @@ export class GitHubService {
       };
 
       // GitHub API로 웹훅 생성
-      console.log(`🔍 Debug - Creating webhook for ${owner}/${cleanRepo} with token: ${accessToken.substring(0, 8)}...`);
-
-      // 토큰 스코프 확인
-      try {
-        const scopeResponse = await axios.get('https://api.github.com/user', {
-          headers: {
-            'Authorization': `token ${accessToken}`,
-            'Accept': 'application/vnd.github.v3+json'
-          }
-        });
-
-        const scopes = scopeResponse.headers['x-oauth-scopes'];
-        console.log(`🔍 Token scopes: ${scopes || 'No scopes header'}`);
-        this.logger.log(`Token scopes for ${owner}/${cleanRepo}: ${scopes || 'No scopes'}`);
-      } catch (scopeError) {
-        this.logger.warn(`Failed to check token scopes: ${scopeError.message}`);
-      }
 
       const response = await axios.post(
         `https://api.github.com/repos/${owner}/${cleanRepo}/hooks`,
@@ -351,9 +312,8 @@ export class GitHubService {
       this.logger.log(`Webhook created successfully for ${owner}/${cleanRepo}. Hook ID: ${response.data.id}`);
     } catch (error) {
       if (error.response?.status === 422) {
-        // 422 에러 상세 확인
-        this.logger.warn(`422 error for webhook creation: ${error.response?.data?.message || error.message}`);
-        this.logger.warn(`422 error details:`, JSON.stringify(error.response?.data, null, 2));
+        // 422 에러 확인
+        this.logger.warn(`Webhook creation failed: ${error.response?.data?.message || error.message}`);
 
         // 실제로 웹훅이 존재하는지 다시 확인
         try {

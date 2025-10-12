@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Param, HttpCode, HttpStatus, UseGuards, Delete } from '@nestjs/common';
+import { Controller, Post, Body, Get, Param, HttpCode, HttpStatus, UseGuards, Delete, Logger } from '@nestjs/common';
 import { FactoryService } from '../blockchain/factory.service';
 import type { CreateStudyDto } from '../blockchain/factory.service';
 import { DatabaseService } from '../database/database.service';
@@ -23,6 +23,8 @@ export interface WithdrawFromStudyDto {
 
 @Controller('study')
 export class StudyController {
+  private readonly logger = new Logger(StudyController.name);
+
   constructor(
     private readonly factoryService: FactoryService,
     private readonly databaseService: DatabaseService,
@@ -254,7 +256,7 @@ export class StudyController {
       // 1. 사용자의 GitHub access token 가져오기
       const accessToken = await this.databaseService.getUserGithubToken(user.email);
 
-      console.log(`🔍 Debug - User: ${user.email}, Token exists: ${!!accessToken}, Token length: ${accessToken?.length || 0}`);
+      this.logger.log(`Registering repository for user: ${user.email}`);
 
       if (!accessToken) {
         return {

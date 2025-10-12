@@ -722,6 +722,13 @@ export class DatabaseService {
   }): Promise<{ isFirstCommit: boolean; isFirstStudyCommitToday: boolean; commitRecord?: CommitRecord }> {
     const { studyId, userId, studyDate, studyMidnightUtc, commitTimestamp, commitId, commitMessage, walletAddress } = data;
 
+    // 사용자 정보와 스터디 정보 조회 (로그 개선용)
+    const user = await this.userRepository.findOne({ where: { id: userId } });
+    const study = await this.studyRepository.findOne({ where: { id: studyId } });
+
+    const userEmail = user?.github_email || `user#${userId}`;
+    const studyName = study?.study_name || `study#${studyId}`;
+
     // 1. StudySession 찾기 또는 생성
     let studySession = await this.studySessionRepository.findOne({
       where: {
@@ -742,7 +749,7 @@ export class DatabaseService {
         status: StudySessionStatus.ACTIVE
       });
       await this.studySessionRepository.save(studySession);
-      this.logger.log(`Created new study session for study ${studyId} on ${studyDate}`);
+      this.logger.log(`Created new study session for "${studyName}" on ${studyDate}`);
     }
 
     // 2. 사용자의 해당 세션 커밋 기록이 있는지 확인
@@ -754,7 +761,7 @@ export class DatabaseService {
     });
 
     if (existingRecord) {
-      this.logger.log(`Commit record already exists for user ${userId} in study session ${studySession.id}`);
+      this.logger.log(`Commit record already exists for ${userEmail} in "${studyName}" session on ${studyDate}`);
       return { isFirstCommit: false, isFirstStudyCommitToday: false, commitRecord: existingRecord };
     }
 
@@ -769,7 +776,7 @@ export class DatabaseService {
     });
 
     const savedRecord = await this.commitRecordRepository.save(commitRecord);
-    this.logger.log(`Recorded first commit for user ${userId} in study ${studyId} on ${studyDate} at ${new Date(commitTimestamp * 1000).toISOString()} (isFirstStudyCommitToday: ${isFirstStudyCommitToday})`);
+    this.logger.log(`Recorded first commit for ${userEmail} in "${studyName}" on ${studyDate} at ${new Date(commitTimestamp * 1000).toISOString()} (isFirstStudyCommitToday: ${isFirstStudyCommitToday})`);
 
     return { isFirstCommit: true, isFirstStudyCommitToday, commitRecord: savedRecord };
   }
