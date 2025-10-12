@@ -558,8 +558,8 @@ export class DatabaseService {
       this.logger.log(`Processing session: study=${study.study_name}, date=${studySession.study_date}`);
       this.logger.log(`Study times: start=${study.study_start_time}s (${Math.floor(study.study_start_time/3600)}:${Math.floor((study.study_start_time%3600)/60)}), end=${study.study_end_time}s (${Math.floor(study.study_end_time/3600)}:${Math.floor((study.study_end_time%3600)/60)})`);
 
-      // StudySession에 저장된 UTC 자정 타임스탬프 사용
-      const studyMidnight = studySession.study_midnight_utc;
+      // StudySession에 저장된 UTC 자정 타임스탬프 사용 (PostgreSQL bigint는 문자열로 반환되므로 Number 변환 필요)
+      const studyMidnight = Number(studySession.study_midnight_utc);
       const endTimeNum = Number(study.study_end_time);
 
       let actualEndTime: number;
