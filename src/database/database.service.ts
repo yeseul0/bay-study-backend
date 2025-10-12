@@ -89,22 +89,16 @@ export class DatabaseService {
    * 모든 데이터 삭제 (개발용)
    */
   async clearAllData(): Promise<void> {
-    // PostgreSQL에서 외래키 제약조건 임시 비활성화
-    await this.userRepository.query('SET session_replication_role = replica;');
+    // QueryBuilder로 모든 레코드 삭제
+    await this.balanceRepository.createQueryBuilder().delete().execute();
+    await this.commitRecordRepository.createQueryBuilder().delete().execute();
+    await this.repositoryRepository.createQueryBuilder().delete().execute();
+    await this.userStudyRepository.createQueryBuilder().delete().execute();
+    await this.studySessionRepository.createQueryBuilder().delete().execute();
+    await this.studyRepository.createQueryBuilder().delete().execute();
+    await this.userRepository.createQueryBuilder().delete().execute();
 
-    // 모든 테이블 데이터 삭제 (외래키 순서 고려)
-    await this.balanceRepository.clear();
-    await this.commitRecordRepository.clear(); // CommitRecord -> StudySession 참조
-    await this.repositoryRepository.clear();
-    await this.userStudyRepository.clear();
-    await this.studySessionRepository.clear(); // StudySession -> Study 참조
-    await this.studyRepository.clear();
-    await this.userRepository.clear();
-
-    // PostgreSQL에서 외래키 제약조건 다시 활성화
-    await this.userRepository.query('SET session_replication_role = DEFAULT;');
-
-    this.logger.log('All data cleared');
+    this.logger.log('All data cleared with QueryBuilder DELETE');
   }
 
   /**

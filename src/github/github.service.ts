@@ -320,6 +320,22 @@ export class GitHubService {
       // GitHub API로 웹훅 생성
       console.log(`🔍 Debug - Creating webhook for ${owner}/${cleanRepo} with token: ${accessToken.substring(0, 8)}...`);
 
+      // 토큰 스코프 확인
+      try {
+        const scopeResponse = await axios.get('https://api.github.com/user', {
+          headers: {
+            'Authorization': `token ${accessToken}`,
+            'Accept': 'application/vnd.github.v3+json'
+          }
+        });
+
+        const scopes = scopeResponse.headers['x-oauth-scopes'];
+        console.log(`🔍 Token scopes: ${scopes || 'No scopes header'}`);
+        this.logger.log(`Token scopes for ${owner}/${cleanRepo}: ${scopes || 'No scopes'}`);
+      } catch (scopeError) {
+        this.logger.warn(`Failed to check token scopes: ${scopeError.message}`);
+      }
+
       const response = await axios.post(
         `https://api.github.com/repos/${owner}/${cleanRepo}/hooks`,
         webhookConfig,
