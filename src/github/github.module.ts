@@ -11,10 +11,11 @@ import { UserStudy } from '../entities/user-study.entity';
 import { Repository } from '../entities/repository.entity';
 import { CommitRecord } from '../entities/commit-record.entity';
 import { Balance } from '../entities/balance.entity';
+import { StudySession } from '../entities/study-session.entity';
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([User, Study, UserStudy, Repository, CommitRecord, Balance]),
+    TypeOrmModule.forFeature([User, Study, UserStudy, Repository, CommitRecord, Balance, StudySession]),
     AuthModule,
   ],
   controllers: [GitHubController],

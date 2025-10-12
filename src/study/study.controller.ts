@@ -225,6 +225,24 @@ export class StudyController {
     }
   }
 
+  @Get('admin/commits')
+  async getAllCommits(): Promise<{ success: boolean; commits?: any; message: string }> {
+    try {
+      const commits = await this.databaseService.getAllCommits();
+
+      return {
+        success: true,
+        commits,
+        message: 'Retrieved all commit records'
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to get commits: ${error.message}`
+      };
+    }
+  }
+
   @Post('repository/register')
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)

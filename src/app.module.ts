@@ -15,6 +15,7 @@ import { UserStudy } from './entities/user-study.entity';
 import { Repository } from './entities/repository.entity';
 import { CommitRecord } from './entities/commit-record.entity';
 import { Balance } from './entities/balance.entity';
+import { StudySession } from './entities/study-session.entity';
 
 @Module({
   imports: [
@@ -23,14 +24,15 @@ import { Balance } from './entities/balance.entity';
     }),
     ScheduleModule.forRoot(),
     TypeOrmModule.forRoot({
-      type: 'mysql',
-      host: process.env.DB_HOST || 'localhost',
-      port: parseInt(process.env.DB_PORT || '3306'),
-      username: process.env.DB_USERNAME || 'root',
-      password: process.env.DB_PASSWORD || '',
-      database: process.env.DB_DATABASE || 'bay_study',
-      entities: [User, Study, UserStudy, Repository, CommitRecord, Balance],
+      type: 'postgres',
+      host: process.env.DB_HOST,
+      port: parseInt(process.env.DB_PORT || '5432'),
+      username: process.env.DB_USERNAME,
+      password: process.env.DB_PASSWORD,
+      database: process.env.DB_NAME,
+      entities: [User, Study, UserStudy, Repository, CommitRecord, Balance, StudySession],
       synchronize: process.env.NODE_ENV !== 'production',
+      ssl: { rejectUnauthorized: false },
     }),
     GitHubModule,
     StudyModule,

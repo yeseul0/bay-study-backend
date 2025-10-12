@@ -1,21 +1,19 @@
 import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, JoinColumn, Index, CreateDateColumn } from 'typeorm';
 import { Study } from './study.entity';
 import { User } from './user.entity';
+import { StudySession } from './study-session.entity';
 
 @Entity('commit_records')
-@Index(['study_id', 'user_id', 'date'], { unique: true }) // 하루에 하나의 커밋만 기록
+@Index(['study_session_id', 'user_id'], { unique: true }) // 세션당 사용자별로 하나의 커밋만 기록
 export class CommitRecord {
   @PrimaryGeneratedColumn()
   id: number;
 
   @Column()
-  study_id: number;
+  study_session_id: number;
 
   @Column()
   user_id: number;
-
-  @Column({ type: 'date' })
-  date: string; // 'YYYY-MM-DD' 형식
 
   @Column({ type: 'bigint' })
   commit_timestamp: number; // Unix timestamp (첫 번째 커밋 시간)
@@ -33,9 +31,9 @@ export class CommitRecord {
   created_at: Date;
 
   // Relations
-  @ManyToOne(() => Study, study => study.commit_records, { onDelete: 'CASCADE' })
-  @JoinColumn({ name: 'study_id' })
-  study: Study;
+  @ManyToOne(() => StudySession, studySession => studySession.commit_records, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'study_session_id' })
+  study_session: StudySession;
 
   @ManyToOne(() => User, user => user.commit_records, { onDelete: 'CASCADE' })
   @JoinColumn({ name: 'user_id' })

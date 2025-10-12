@@ -101,11 +101,12 @@ export class GitHubService {
         const studyDateKorean = new Date((studyDate + 9 * 3600) * 1000); // UTC 자정 + 9시간 = 한국 자정
         const commitDateString = studyDateKorean.toISOString().split('T')[0];
 
-        // 데이터베이스에 커밋 기록 저장 (하루 첫 번째 커밋만)
+        // 데이터베이스에 커밋 기록 저장 (StudySession 기반)
         const commitRecord = await this.databaseService.recordCommit({
           studyId: study.id,
-          userId: participation.userId!, // userId 추가 필요
-          date: commitDateString,
+          userId: participation.userId!,
+          studyDate: commitDateString,
+          studyMidnightUtc: studyDate,
           commitTimestamp: commitTimestamp,
           commitId: commitData.commitId,
           commitMessage: commitData.message,

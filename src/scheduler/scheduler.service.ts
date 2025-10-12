@@ -38,6 +38,9 @@ export class SchedulerService {
           // 블록체인에 closeStudy 호출
           await this.blockchainService.closeStudy(study.proxyAddress, study.studyDate);
 
+          // StudySession 상태를 CLOSED로 업데이트
+          await this.databaseService.markStudySessionClosed(study.proxyAddress, study.studyDate);
+
           this.logger.log(`Successfully closed study: ${study.studyName}`);
         } catch (error) {
           this.logger.error(`Failed to close study ${study.studyName}:`, error);

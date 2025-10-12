@@ -7,6 +7,7 @@ import { UserStudy } from '../entities/user-study.entity';
 import { Repository } from '../entities/repository.entity';
 import { CommitRecord } from '../entities/commit-record.entity';
 import { Balance } from '../entities/balance.entity';
+import { StudySession, StudySessionStatus } from '../entities/study-session.entity';
 
 export interface RegisterParticipantDto {
   walletAddress: string;
@@ -31,6 +32,8 @@ export class DatabaseService {
     private commitRecordRepository: TypeOrmRepository<CommitRecord>,
     @InjectRepository(Balance)
     private balanceRepository: TypeOrmRepository<Balance>,
+    @InjectRepository(StudySession)
+    private studySessionRepository: TypeOrmRepository<StudySession>,
   ) {}
 
   /**
@@ -86,21 +89,62 @@ export class DatabaseService {
    * 모든 데이터 삭제 (개발용)
    */
   async clearAllData(): Promise<void> {
-    // 외래키 제약조건 임시 비활성화
-    await this.userRepository.query('SET FOREIGN_KEY_CHECKS = 0');
+    // PostgreSQL에서 외래키 제약조건 임시 비활성화
+    await this.userRepository.query('SET session_replication_role = replica;');
 
     // 모든 테이블 데이터 삭제 (외래키 순서 고려)
     await this.balanceRepository.clear();
-    await this.commitRecordRepository.clear();
+    await this.commitRecordRepository.clear(); // CommitRecord -> StudySession 참조
     await this.repositoryRepository.clear();
     await this.userStudyRepository.clear();
+    await this.studySessionRepository.clear(); // StudySession -> Study 참조
     await this.studyRepository.clear();
     await this.userRepository.clear();
 
-    // 외래키 제약조건 다시 활성화
-    await this.userRepository.query('SET FOREIGN_KEY_CHECKS = 1');
+    // PostgreSQL에서 외래키 제약조건 다시 활성화
+    await this.userRepository.query('SET session_replication_role = DEFAULT;');
 
     this.logger.log('All data cleared');
+  }
+
+  /**
+   * 모든 커밋 기록 조회
+   */
+  async getAllCommits(): Promise<any[]> {
+    try {
+      const commits = await this.commitRecordRepository.find({
+        relations: ['user', 'study_session', 'study_session.study'],
+        order: {
+          commit_timestamp: 'DESC'
+        }
+      });
+
+      return commits.map(commit => ({
+        id: commit.id,
+        commitId: commit.commit_id,
+        commitMessage: commit.commit_message,
+        commitTimestamp: commit.commit_timestamp,
+        date: commit.study_session?.study_date,
+        walletAddress: commit.wallet_address,
+        user: {
+          id: commit.user?.id,
+          githubEmail: commit.user?.github_email
+        },
+        study: {
+          id: commit.study_session?.study?.id,
+          studyName: commit.study_session?.study?.study_name,
+          proxyAddress: commit.study_session?.study?.proxy_address
+        },
+        studySession: {
+          id: commit.study_session?.id,
+          studyDate: commit.study_session?.study_date,
+          status: commit.study_session?.status
+        }
+      }));
+    } catch (error) {
+      this.logger.error('Failed to get all commits', error);
+      throw error;
+    }
   }
 
   /**
@@ -203,11 +247,17 @@ export class DatabaseService {
       this.logger.log(`Deleted ${deleteResult.affected} repositories for ${githubEmail} in study ${proxyAddress}`);
     }
 
-    // 5. 관련 커밋 기록도 삭제 (선택사항)
-    await this.commitRecordRepository.delete({
-      study_id: study.id,
-      user_id: user.id
+    // 5. 관련 커밋 기록도 삭제 (StudySession을 통해)
+    const userStudySessions = await this.studySessionRepository.find({
+      where: { study_id: study.id }
     });
+
+    for (const session of userStudySessions) {
+      await this.commitRecordRepository.delete({
+        study_session_id: session.id,
+        user_id: user.id
+      });
+    }
 
     // 6. 잔액 기록도 삭제 (선택사항)
     await this.balanceRepository.delete({
@@ -484,31 +534,16 @@ export class DatabaseService {
     studyDate: number; // 자정 타임스탬프
     studyEndTime: number;
   }>> {
-    // 현재 UTC 시간 (올바른 현재 시간)
+    // 현재 UTC 시간
     const nowUTCTimestamp = Math.floor(Date.now() / 1000);
 
-    // 1. KST 기준 오늘과 어제 날짜 계산
-    const nowKST = nowUTCTimestamp * 1000 + 9 * 60 * 60 * 1000; // KST 변환용
-    const todayKST = new Date(nowKST);
-    const yesterdayKST = new Date(nowKST);
-    yesterdayKST.setDate(todayKST.getDate() - 1);
-
-    const todayDate = todayKST.toISOString().split('T')[0]; // YYYY-MM-DD
-    const yesterdayDate = yesterdayKST.toISOString().split('T')[0];
-
-    // 2. 커밋 기록이 있는 스터디들 조회 (중복 제거)
-    const commitRecords = await this.commitRecordRepository
-      .createQueryBuilder('cr')
-      .leftJoinAndSelect('cr.study', 'study')
-      .where('cr.date IN (:...dates)', { dates: [todayDate, yesterdayDate] })
-      .getMany();
-
-    // 중복 제거 (study_id + date 조합별로 하나씩만)
-    const uniqueRecords = commitRecords.filter((record, index, self) =>
-      index === self.findIndex(r =>
-        r.study_id === record.study_id && r.date === record.date
-      )
-    );
+    // ACTIVE 상태인 StudySession들 조회 (종료 시간이 지난 것들)
+    const activeStudySessions = await this.studySessionRepository.find({
+      where: {
+        status: StudySessionStatus.ACTIVE
+      },
+      relations: ['study']
+    });
 
     const studiesToClose: Array<{
       proxyAddress: string;
@@ -517,41 +552,26 @@ export class DatabaseService {
       studyEndTime: number;
     }> = [];
 
-    for (const record of uniqueRecords) {
-      const study = record.study;
-      const recordDate = record.date;
+    for (const studySession of activeStudySessions) {
+      const study = studySession.study;
 
-      this.logger.log(`Processing record: study=${study.study_name}, date=${recordDate}`);
+      this.logger.log(`Processing session: study=${study.study_name}, date=${studySession.study_date}`);
       this.logger.log(`Study times: start=${study.study_start_time}s (${Math.floor(study.study_start_time/3600)}:${Math.floor((study.study_start_time%3600)/60)}), end=${study.study_end_time}s (${Math.floor(study.study_end_time/3600)}:${Math.floor((study.study_end_time%3600)/60)})`);
 
-      // KST 기준 해당 날짜의 자정 타임스탬프 계산
-      const studyDateKST = new Date(recordDate + 'T00:00:00');
-
-      if (isNaN(studyDateKST.getTime())) {
-        this.logger.error(`Invalid date: ${recordDate}, skipping...`);
-        continue;
-      }
-
-      const studyDate = Math.floor(studyDateKST.getTime() / 1000);
-
-      // calculateStudyDate()와 동일한 로직으로 올바른 자정 계산
-      const studyMidnight = this.calculateStudyDateForScheduler(
-        nowUTCTimestamp,
-        study.study_start_time,
-        study.study_end_time
-      );
-
+      // StudySession에 저장된 UTC 자정 타임스탬프 사용
+      const studyMidnight = studySession.study_midnight_utc;
       const endTimeNum = Number(study.study_end_time);
+
       let actualEndTime: number;
 
       if (endTimeNum >= 86400) {
-        // 자정을 넘나드는 스터디
-        actualEndTime = studyMidnight + (endTimeNum % 86400); // 24시간 넘어간 부분만
-        this.logger.log(`Overnight study: using Korean midnight (UTC) ${studyMidnight}`);
+        // 자정을 넘나드는 스터디 (예: 23:00 - 01:00)
+        actualEndTime = studyMidnight + (endTimeNum % 86400);
+        this.logger.log(`Overnight study: using midnight ${studyMidnight}`);
       } else {
-        // 당일 완료 스터디
+        // 당일 완료 스터디 (예: 19:00 - 21:00)
         actualEndTime = studyMidnight + endTimeNum;
-        this.logger.log(`Same-day study: using Korean midnight (UTC) ${studyMidnight}`);
+        this.logger.log(`Same-day study: using midnight ${studyMidnight}`);
       }
 
       this.logger.log(`Checking study: ${study.study_name}, endTime: ${endTimeNum >= 86400 ? 'overnight' : 'same-day'}`);
@@ -578,6 +598,39 @@ export class DatabaseService {
     }
 
     return studiesToClose;
+  }
+
+  /**
+   * StudySession 상태를 CLOSED로 업데이트 (스케줄러에서 성공적으로 close한 후 호출)
+   */
+  async markStudySessionClosed(proxyAddress: string, studyDate: number, blockchainTxHash?: string): Promise<void> {
+    try {
+      const studySession = await this.studySessionRepository.findOne({
+        where: {
+          study_midnight_utc: studyDate,
+          status: StudySessionStatus.ACTIVE
+        },
+        relations: ['study']
+      });
+
+      if (!studySession || studySession.study.proxy_address !== proxyAddress) {
+        this.logger.warn(`No active StudySession found for ${proxyAddress} on ${new Date(studyDate * 1000).toISOString()}`);
+        return;
+      }
+
+      studySession.status = StudySessionStatus.CLOSED;
+      studySession.closed_at = Math.floor(Date.now() / 1000);
+      if (blockchainTxHash) {
+        studySession.blockchain_tx_hash = blockchainTxHash;
+      }
+
+      await this.studySessionRepository.save(studySession);
+      this.logger.log(`Marked StudySession as CLOSED: ${studySession.id} for study ${proxyAddress}`);
+
+    } catch (error) {
+      this.logger.error(`Failed to mark StudySession as closed`, error);
+      throw error;
+    }
   }
 
   /**
@@ -666,43 +719,55 @@ export class DatabaseService {
   async recordCommit(data: {
     studyId: number;
     userId: number;
-    date: string; // 'YYYY-MM-DD'
+    studyDate: string; // 'YYYY-MM-DD'
+    studyMidnightUtc: number; // UTC timestamp for Korean midnight
     commitTimestamp: number;
     commitId: string;
     commitMessage: string;
     walletAddress: string;
   }): Promise<{ isFirstCommit: boolean; isFirstStudyCommitToday: boolean; commitRecord?: CommitRecord }> {
-    const { studyId, userId, date, commitTimestamp, commitId, commitMessage, walletAddress } = data;
+    const { studyId, userId, studyDate, studyMidnightUtc, commitTimestamp, commitId, commitMessage, walletAddress } = data;
 
-    // 사용자의 해당 날짜 커밋 기록이 있는지 확인
-    const existingRecord = await this.commitRecordRepository.findOne({
+    // 1. StudySession 찾기 또는 생성
+    let studySession = await this.studySessionRepository.findOne({
       where: {
         study_id: studyId,
-        user_id: userId,
-        date: date
+        study_date: studyDate
+      }
+    });
+
+    const isFirstStudyCommitToday = !studySession;
+
+    if (!studySession) {
+      // StudySession 생성
+      studySession = this.studySessionRepository.create({
+        study_id: studyId,
+        study_date: studyDate,
+        study_midnight_utc: studyMidnightUtc,
+        started_at: commitTimestamp,
+        status: StudySessionStatus.ACTIVE
+      });
+      await this.studySessionRepository.save(studySession);
+      this.logger.log(`Created new study session for study ${studyId} on ${studyDate}`);
+    }
+
+    // 2. 사용자의 해당 세션 커밋 기록이 있는지 확인
+    const existingRecord = await this.commitRecordRepository.findOne({
+      where: {
+        study_session_id: studySession.id,
+        user_id: userId
       }
     });
 
     if (existingRecord) {
-      this.logger.log(`Commit record already exists for user ${userId} in study ${studyId} on ${date}`);
+      this.logger.log(`Commit record already exists for user ${userId} in study session ${studySession.id}`);
       return { isFirstCommit: false, isFirstStudyCommitToday: false, commitRecord: existingRecord };
     }
 
-    // 해당 스터디에서 오늘 첫 번째 커밋인지 확인 (모든 참가자 통틀어서)
-    const todayStudyCommitCount = await this.commitRecordRepository.count({
-      where: {
-        study_id: studyId,
-        date: date
-      }
-    });
-
-    const isFirstStudyCommitToday = todayStudyCommitCount === 0;
-
-    // 첫 번째 커밋이므로 기록
+    // 3. 새로운 커밋 기록 생성
     const commitRecord = this.commitRecordRepository.create({
-      study_id: studyId,
+      study_session_id: studySession.id,
       user_id: userId,
-      date: date,
       commit_timestamp: commitTimestamp,
       commit_id: commitId,
       commit_message: commitMessage,
@@ -710,7 +775,7 @@ export class DatabaseService {
     });
 
     const savedRecord = await this.commitRecordRepository.save(commitRecord);
-    this.logger.log(`Recorded first commit for user ${userId} in study ${studyId} on ${date} at ${new Date(commitTimestamp * 1000).toISOString()} (isFirstStudyCommitToday: ${isFirstStudyCommitToday})`);
+    this.logger.log(`Recorded first commit for user ${userId} in study ${studyId} on ${studyDate} at ${new Date(commitTimestamp * 1000).toISOString()} (isFirstStudyCommitToday: ${isFirstStudyCommitToday})`);
 
     return { isFirstCommit: true, isFirstStudyCommitToday, commitRecord: savedRecord };
   }
@@ -729,14 +794,15 @@ export class DatabaseService {
     const records = await this.commitRecordRepository
       .createQueryBuilder('cr')
       .leftJoinAndSelect('cr.user', 'user')
-      .leftJoinAndSelect('cr.study', 'study')
+      .leftJoinAndSelect('cr.study_session', 'study_session')
+      .leftJoinAndSelect('study_session.study', 'study')
       .where('study.proxy_address = :proxyAddress', { proxyAddress: proxyAddress.toLowerCase() })
-      .orderBy('cr.date', 'DESC')
+      .orderBy('study_session.study_date', 'DESC')
       .addOrderBy('cr.commit_timestamp', 'ASC')
       .getMany();
 
     return records.map(record => ({
-      date: record.date,
+      date: record.study_session.study_date,
       participantEmail: record.user.github_email,
       participantWallet: record.wallet_address,
       commitTime: new Date(record.commit_timestamp * 1000),
