@@ -353,6 +353,7 @@ export class GitHubService {
       if (error.response?.status === 422) {
         // 422 에러 상세 확인
         this.logger.warn(`422 error for webhook creation: ${error.response?.data?.message || error.message}`);
+        this.logger.warn(`422 error details:`, JSON.stringify(error.response?.data, null, 2));
 
         // 실제로 웹훅이 존재하는지 다시 확인
         try {
