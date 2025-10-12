@@ -254,6 +254,8 @@ export class StudyController {
       // 1. 사용자의 GitHub access token 가져오기
       const accessToken = await this.databaseService.getUserGithubToken(user.email);
 
+      console.log(`🔍 Debug - User: ${user.email}, Token exists: ${!!accessToken}, Token length: ${accessToken?.length || 0}`);
+
       if (!accessToken) {
         return {
           success: false,

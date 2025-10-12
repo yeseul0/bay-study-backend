@@ -15,7 +15,7 @@ export class SchedulerService {
   /**
    * 매 시간마다 종료해야 할 스터디들 체크 및 종료 처리
    */
-  @Cron('20 * * * *', { timeZone: 'Asia/Seoul' }) // KST 기준 매시 20분에 실행
+  @Cron('5 * * * *', { timeZone: 'Asia/Seoul' }) // KST 기준 매시 20분에 실행
   async handleStudyClosures() {
     try {
       this.logger.log('Checking for studies to close...');
@@ -67,7 +67,7 @@ export class SchedulerService {
         return {
           success: true,
           message: 'No studies to close at this time',
-          closedStudies: []
+          closedStudies: [],
         };
       }
 
@@ -80,7 +80,7 @@ export class SchedulerService {
             studyName: study.studyName,
             proxyAddress: study.proxyAddress,
             studyDate: study.studyDate,
-            status: 'closed'
+            status: 'closed',
           });
         } catch (error) {
           closedStudies.push({

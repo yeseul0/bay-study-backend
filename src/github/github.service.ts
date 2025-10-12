@@ -318,6 +318,8 @@ export class GitHubService {
       };
 
       // GitHub API로 웹훅 생성
+      console.log(`🔍 Debug - Creating webhook for ${owner}/${cleanRepo} with token: ${accessToken.substring(0, 8)}...`);
+
       const response = await axios.post(
         `https://api.github.com/repos/${owner}/${cleanRepo}/hooks`,
         webhookConfig,
@@ -333,9 +335,30 @@ export class GitHubService {
       this.logger.log(`Webhook created successfully for ${owner}/${cleanRepo}. Hook ID: ${response.data.id}`);
     } catch (error) {
       if (error.response?.status === 422) {
-        // 웹훅이 이미 존재하는 경우 - 깔끔한 로그
-        this.logger.log(`✅ Webhook already configured for ${owner}/${cleanRepo}`);
-        return; // 이미 존재하면 에러로 처리하지 않음
+        // 422 에러 상세 확인
+        this.logger.warn(`422 error for webhook creation: ${error.response?.data?.message || error.message}`);
+
+        // 실제로 웹훅이 존재하는지 다시 확인
+        try {
+          const reCheckWebhooks = await this.getRepositoryWebhooks(owner, cleanRepo, accessToken);
+          const targetUrl = this.configService.get('GITHUB_WEBHOOK_URL');
+          const foundWebhook = reCheckWebhooks.find(hook =>
+            hook.config?.url === targetUrl &&
+            hook.events.includes('push') &&
+            hook.active
+          );
+
+          if (foundWebhook) {
+            this.logger.log(`✅ Webhook confirmed to exist for ${owner}/${cleanRepo} (ID: ${foundWebhook.id})`);
+            return; // 실제로 존재함
+          } else {
+            this.logger.error(`❌ Webhook creation failed and webhook not found for ${owner}/${cleanRepo}`);
+            throw new Error(`Failed to create webhook: ${error.response?.data?.message || error.message}`);
+          }
+        } catch (recheckError) {
+          this.logger.error(`Failed to recheck webhooks for ${owner}/${cleanRepo}`, recheckError);
+          throw new Error(`Webhook creation failed and unable to verify: ${error.response?.data?.message || error.message}`);
+        }
       }
 
       this.logger.error(`Failed to create webhook for ${repoUrl}`, error);
