@@ -126,14 +126,18 @@ export class BlockchainService {
       this.logger.log(`Required end time: ${requiredEndTime} (${new Date(requiredEndTime * 1000).toISOString()})`);
       this.logger.log(`Block time > Required time? ${blockTimestamp} > ${requiredEndTime} = ${blockTimestamp > requiredEndTime}`);
 
-      // 컨트랙트의 closeStudy 함수 호출
-      const tx = await studyContract.closeStudy(studyDate);
+      // 시간이 지난 스터디만 종료
+      if (blockTimestamp > requiredEndTime) {
+        // 컨트랙트의 closeStudy 함수 호출
+        const tx = await studyContract.closeStudy(studyDate);
+        this.logger.log(`closeStudy transaction sent: ${tx.hash}`);
 
-      this.logger.log(`closeStudy transaction sent: ${tx.hash}`);
-
-      // 트랜잭션 완료 대기
-      const receipt = await tx.wait();
-      this.logger.log(`closeStudy confirmed in block: ${receipt.blockNumber}`);
+        // 트랜잭션 완료 대기
+        const receipt = await tx.wait();
+        this.logger.log(`closeStudy confirmed in block: ${receipt.blockNumber}`);
+      } else {
+        this.logger.log(`Study period not yet ended. Skipping.`);
+      }
 
     } catch (error) {
       this.logger.error('Failed to close study on blockchain', error);
