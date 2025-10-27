@@ -29,7 +29,7 @@ export class AuthController {
   async handleGitHubCallback(
     @Query('code') code: string,
     @Query('state') state: string,
-    @Res() res: Response
+    @Res() res: Response,
   ): Promise<void> {
     try {
       this.logger.log('GitHub OAuth callback received');
@@ -50,12 +50,15 @@ export class AuthController {
 
       // JWT를 httpOnly 쿠키로 설정
       this.logger.log(`Setting JWT cookie for user: ${result.user.github_email}`);
+
+      // 로컬 환경에서는 도메인 설정 안 함 (127.0.0.1과 localhost 모두 지원)
       res.cookie('access_token', token, {
         httpOnly: true, // XSS 공격 방지
         secure: process.env.NODE_ENV === 'production', // HTTPS에서만 전송
         sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax', // 배포시 cross-site 허용
         maxAge: 30 * 24 * 60 * 60 * 1000, // 30일
-        domain: process.env.NODE_ENV === 'production' ? undefined : 'localhost', // 로컬에서는 명시적 도메인
+        // 로컬에서는 domain 설정 안 함 (현재 도메인에만 쿠키 설정)
+        // 프로덕션에서는 필요시 domain: '.yourdomain.com' 추가 가능
       });
 
       // 성공시 프론트엔드 대시보드로 리다이렉트

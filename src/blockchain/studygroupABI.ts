@@ -174,6 +174,97 @@ export const StudyGroupABI = [
 	{
 		"inputs": [
 			{
+				"internalType": "uint256",
+				"name": "timestamp",
+				"type": "uint256"
+			}
+		],
+		"name": "getAllCommitTimes",
+		"outputs": [
+			{
+				"internalType": "address[]",
+				"name": "participantList",
+				"type": "address[]"
+			},
+			{
+				"internalType": "uint256[]",
+				"name": "commitTimes",
+				"type": "uint256[]"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "address",
+				"name": "participant",
+				"type": "address"
+			}
+		],
+		"name": "getBalance",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "timestamp",
+				"type": "uint256"
+			},
+			{
+				"internalType": "address",
+				"name": "participant",
+				"type": "address"
+			}
+		],
+		"name": "getCommitTime",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "",
+				"type": "uint256"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
+				"internalType": "uint256",
+				"name": "timestamp",
+				"type": "uint256"
+			}
+		],
+		"name": "getStudyDayInfo",
+		"outputs": [
+			{
+				"internalType": "uint256",
+				"name": "participantCount",
+				"type": "uint256"
+			},
+			{
+				"internalType": "bool",
+				"name": "isClosed",
+				"type": "bool"
+			}
+		],
+		"stateMutability": "view",
+		"type": "function"
+	},
+	{
+		"inputs": [
+			{
 				"internalType": "string",
 				"name": "_studyName",
 				"type": "string"

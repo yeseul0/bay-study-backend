@@ -98,7 +98,16 @@ export class DatabaseService {
     await this.studyRepository.createQueryBuilder().delete().execute();
     await this.userRepository.createQueryBuilder().delete().execute();
 
-    this.logger.log('All data cleared with QueryBuilder DELETE');
+    // Auto Increment ID 초기화 (PostgreSQL 시퀀스 리셋)
+    await this.balanceRepository.query('ALTER SEQUENCE balances_id_seq RESTART WITH 1');
+    await this.commitRecordRepository.query('ALTER SEQUENCE commit_records_id_seq RESTART WITH 1');
+    await this.repositoryRepository.query('ALTER SEQUENCE repositories_id_seq RESTART WITH 1');
+    await this.userStudyRepository.query('ALTER SEQUENCE user_studies_id_seq RESTART WITH 1');
+    await this.studySessionRepository.query('ALTER SEQUENCE study_sessions_id_seq RESTART WITH 1');
+    await this.studyRepository.query('ALTER SEQUENCE studies_id_seq RESTART WITH 1');
+    await this.userRepository.query('ALTER SEQUENCE users_id_seq RESTART WITH 1');
+
+    this.logger.log('All data cleared and ID sequences reset to 1');
   }
 
   /**
