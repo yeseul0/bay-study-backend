@@ -33,11 +33,23 @@ import { StudySession } from './entities/study-session.entity';
             username: process.env.DB_USERNAME,
             password: process.env.DB_PASSWORD,
             database: process.env.DB_NAME,
-          }
-      ),
-      entities: [User, Study, UserStudy, Repository, CommitRecord, Balance, StudySession],
+          }),
+      entities: [
+        User,
+        Study,
+        UserStudy,
+        Repository,
+        CommitRecord,
+        Balance,
+        StudySession,
+      ],
       synchronize: process.env.NODE_ENV !== 'production',
-      ssl: { rejectUnauthorized: false },
+      ssl: process.env.DATABASE_URL
+        ? { rejectUnauthorized: false }
+        : { rejectUnauthorized: false },
+      extra: {
+        ssl: { rejectUnauthorized: false },
+      },
     }),
     GitHubModule,
     StudyModule,
