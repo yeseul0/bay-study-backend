@@ -431,6 +431,49 @@ export class StudyController {
     }
   }
 
+  @Get('all/commits/today')
+  async getAllTodayCommits(): Promise<{
+    success: boolean;
+    date?: string;
+    studies?: Array<{
+      studyName: string;
+      proxyAddress: string;
+      sessions: Array<{
+        sessionId: number;
+        studyDate: string;
+        status: string;
+        startedAt: number | null;
+        participants: Array<{
+          githubEmail: string;
+          walletAddress: string;
+          commit: {
+            commitId: string;
+            commitMessage: string;
+            commitTime: number;
+          } | null;
+        }>;
+      }>;
+    }>;
+    message: string;
+  }> {
+    try {
+      const result = await this.databaseService.getAllStudiesCommitsToday();
+
+      const totalSessions = result.studies.reduce((sum, study) => sum + study.sessions.length, 0);
+
+      return {
+        success: true,
+        date: result.date,
+        studies: result.studies,
+        message: `Found ${result.studies.length} studies with ${totalSessions} total sessions for ${result.date}`
+      };
+    } catch (error) {
+      return {
+        success: false,
+        message: `Failed to get today's commits: ${error.message}`
+      };
+    }
+  }
 
   @Post('sync-blockchain')
   @HttpCode(HttpStatus.OK)

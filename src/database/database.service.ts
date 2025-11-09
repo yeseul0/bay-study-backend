@@ -1005,4 +1005,124 @@ export class DatabaseService {
       };
     }
   }
+
+  /**
+   * 모든 스터디의 오늘 커밋 정보 조회
+   */
+  async getAllStudiesCommitsToday(date?: string): Promise<{
+    date: string;
+    studies: Array<{
+      studyName: string;
+      proxyAddress: string;
+      sessions: Array<{
+        sessionId: number;
+        studyDate: string;
+        status: string;
+        startedAt: number | null;
+        participants: Array<{
+          githubEmail: string;
+          walletAddress: string;
+          commit: {
+            commitId: string;
+            commitMessage: string;
+            commitTime: number;
+          } | null;
+        }>;
+      }>;
+    }>;
+  }> {
+    // 1. 오늘 날짜 계산 (한국 시간 기준)
+    let targetDate: string;
+    if (date) {
+      targetDate = date;
+    } else {
+      const nowKST = new Date(Date.now() + 9 * 3600 * 1000);
+      const year = nowKST.getUTCFullYear();
+      const month = String(nowKST.getUTCMonth() + 1).padStart(2, '0');
+      const day = String(nowKST.getUTCDate()).padStart(2, '0');
+      targetDate = `${year}-${month}-${day}`;
+    }
+
+    this.logger.log(`Fetching all studies' sessions for ${targetDate}`);
+
+    // 2. 모든 스터디 조회
+    const allStudies = await this.studyRepository.find({
+      order: { created_at: 'DESC' }
+    });
+
+    // 3. 각 스터디별로 세션 및 커밋 정보 조회
+    const studiesData = await Promise.all(
+      allStudies.map(async (study) => {
+        // 해당 날짜의 세션들 조회
+        const sessions = await this.studySessionRepository.find({
+          where: {
+            study_id: study.id,
+            study_date: targetDate
+          },
+          relations: ['commit_records', 'commit_records.user'],
+          order: { created_at: 'ASC' }
+        });
+
+        // 스터디의 모든 참여자 조회
+        const allParticipants = await this.userStudyRepository.find({
+          where: { study_id: study.id },
+          relations: ['user']
+        });
+
+        // 세션이 있으면 세션별로 참여자 정보 매핑
+        // 세션이 없으면 가상 세션 하나 만들어서 참여자들 포함
+        let sessionData;
+
+        if (sessions.length > 0) {
+          // 세션이 있는 경우
+          sessionData = sessions.map(session => ({
+            sessionId: session.id,
+            studyDate: session.study_date,
+            status: session.status,
+            startedAt: session.started_at ? Number(session.started_at) : null,
+            participants: allParticipants.map(userStudy => {
+              // 해당 참여자의 커밋 기록 찾기
+              const commitRecord = session.commit_records?.find(
+                cr => cr.user_id === userStudy.user_id
+              );
+
+              return {
+                githubEmail: userStudy.user.github_email,
+                walletAddress: userStudy.wallet_address,
+                commit: commitRecord ? {
+                  commitId: commitRecord.commit_id,
+                  commitMessage: commitRecord.commit_message,
+                  commitTime: Number(commitRecord.commit_timestamp)
+                } : null
+              };
+            })
+          }));
+        } else {
+          // 세션이 없는 경우 - 참여자들만 보여주는 가상 세션 생성
+          sessionData = [{
+            sessionId: null,
+            studyDate: targetDate,
+            status: 'NO_SESSION',
+            startedAt: null,
+            participants: allParticipants.map(userStudy => ({
+              githubEmail: userStudy.user.github_email,
+              walletAddress: userStudy.wallet_address,
+              commit: null
+            }))
+          }];
+        }
+
+        return {
+          studyName: study.study_name,
+          proxyAddress: study.proxy_address,
+          sessions: sessionData
+        };
+      })
+    );
+
+    return {
+      date: targetDate,
+      studies: studiesData
+    };
+  }
 }
