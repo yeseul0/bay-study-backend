@@ -5,7 +5,7 @@ import { CommitRecord } from './commit-record.entity';
 export enum StudySessionStatus {
   ACTIVE = 'ACTIVE',
   CLOSED = 'CLOSED',
-  FAILED = 'FAILED'
+  FAILED = 'FAILED',
 }
 
 @Entity('study_sessions')
